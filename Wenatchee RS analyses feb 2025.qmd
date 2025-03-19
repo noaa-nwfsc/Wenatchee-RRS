@@ -218,8 +218,34 @@ summary(RSgen2.both.brood.allyears)
 
 ```{r}
 ### note - this file was created using the field-only origin - not ped-corrected
-anc = read.csv("Ancestor_origins_1.22.25.csv",stringsAsFactors = F)
+anc = read.csv("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Ancestor_origins_1.22.25.csv",stringsAsFactors = F)
 pedf = merge(pedf,anc,by="id",all.x=T)
+write.csv(pedf,"pedf_with_anc.csv",row.names = F)
+```
+
+Identify individuals with varying number of hatchery or wild grandparents or other ancestors, for potential WGS analysis.
+
+In the file below, the *wild_parents_and_grandparents.csv* file contains fish with two wild parents and four wild grandparents. They can have hatchery ancestry for generations deeper than grandparents. The file *hat_parents_and_grandparents.csv* is the same, but for hatchery parents and grandparents.
+
+The files *wild_lineages.csv* and *hatchery_lineages.csv* contain fish with only wild or only hatchery ancestry. Note that ancestry information is incomplete, however.
+
+```{r}
+wild4 = subset(pedf,N.wild.gp == 4 & Origin_ped.sire=="Wild"&Origin_ped.dam=="Wild")
+nrow(wild4)
+table(wild4$Year.off)
+hat4 = subset(pedf,N.hatchery.gp == 4 & Origin_ped.sire=="Hatchery" & Origin_ped.dam=="Hatchery")
+nrow(hat4)
+table(hat4$Year.off)
+write.csv(wild4,"wild_parents_and_grandparents.csv",row.names = F)
+write.csv(hat4,"hat_parents_and_grandparents.csv",row.names = F)
+
+wildonly = subset(pedf,anc.ratio==1 & Origin_ped.sire=="Wild" & Origin_ped.dam == "Wild")
+nrow(wildonly)
+hatonly = subset(pedf,anc.ratio==0 & Origin_ped.sire == "Hatchery" & Origin_ped.dam=="Hatchery")
+table(wildonly$N.wild.anc)
+table(hatonly$N.hatchery.anc)
+write.csv(wildonly,"wild_lineages.csv",row.names = F)
+write.csv(hatonly,"hat_lineages.csv",row.names = F)
 ```
 
 ### Both sexes, stream environment
