@@ -1,0 +1,340 @@
+---
+title: "Wenatchee RS analyses"
+
+format: html
+embed-resources: true
+editor: visual
+---
+
+## Preliminary analysis of Wenatchee River Chinook reproductive success data
+
+Michael Ford 2.17.25
+
+```{r}
+library(ggplot2)
+
+ped = read.csv("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/pedigree_fitness_Tumwater_Grun_3.12.25.csv",stringsAsFactors = F)
+
+### do some basic summaries
+pedf = subset(ped,Origin.off == "Hatchery" | Origin.off == "Wild")
+pedf = subset(pedf,!is.na(Origin.off))
+pedf = subset(pedf,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+table(pedf$GRun.off)
+pedf = subset(pedf,GRun.off == "Spring" )
+table(pedf$Final_Status.off)
+
+pedf = subset(pedf,Final_Status.off == "Broodstock" | Final_Status.off == "Spawning Grounds")
+table(pedf$Final_Status.off)
+```
+
+### Summarize the number of location and origin calls that we changed due to location/origin contradictions
+
+Location changes
+
+```{r}
+table(pedf$Final_Status.off,pedf$Final_Status_ped.off)
+```
+
+Origin Changes
+
+```{r}
+table(pedf$Origin.off,pedf$Origin_ped.off)
+```
+
+### Annual counts by sex and origin
+
+```{r}
+#counts per year by sex and origin
+#pdf("year counts by sex and origin.pdf")
+ggplot(data=pedf,aes(Year.off,fill=Origin_ped.off)) + geom_bar() + facet_wrap(~Sex_Final.off) + scale_fill_manual(values=c("darkseagreen","steelblue"))
+#dev.off()
+```
+
+### Annual run timing distributions
+
+```{r}
+pedf$Date.off = as.Date(pedf$Date.off,format = '%m/%d/%y')
+temp = paste("1/1/",pedf$Year.off,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = pedf$Date.off - temp
+pedf$Dayofyear.off = dayofyear
+
+#pdf("run time by year.pdf")
+ggplot(data=pedf,aes(y=as.factor(Year.off),x=Dayofyear.off)) + geom_violin(draw_quantiles = .5)
+#dev.off()
+
+
+```
+
+### Annual length (POH) distribution, by sex
+
+```{r}
+#pdf("POH by year and sex.pdf")
+ggplot(data=pedf,aes(y=as.factor(Year.off),x=POH.off,fill=Sex_Final.off)) + geom_violin(draw_quantiles = .5) + scale_fill_manual(values=c("darkseagreen","steelblue"))
+#dev.off()
+```
+
+### Annual length (POH) distribution by origin, original
+
+```{r}
+#pdf("POH by year and origin.pdf")
+ggplot(data=pedf,aes(y=as.factor(Year.off),x=POH.off,fill=Origin.off)) + geom_violin(draw_quantiles = .5) + scale_fill_manual(values=c("darkseagreen","steelblue")) 
+#dev.off()
+```
+
+### Annual length (POH) distribution by origin, pedigree corrected
+
+```{r}
+#pdf("POH by year and origin.pdf")
+ggplot(data=pedf,aes(y=as.factor(Year.off),x=POH.off,fill=Origin_ped.off)) + geom_violin(draw_quantiles = .5) + scale_fill_manual(values=c("darkseagreen","steelblue")) 
+#dev.off()
+```
+
+### 
+
+### Dot plot of reproductive success (RS = adult offspring number) by location
+
+```{r}
+# RS by year, origin, sex, and location
+#pdf("RS by year and origin and final location.pdf")
+ggplot(data=subset(pedf),aes(y=as.factor(Year.off),x=noff.off,color=Origin_ped.off)) + geom_jitter() + scale_color_manual(values=c("darkseagreen","steelblue")) + facet_wrap(~Final_Status_ped.off,scales="free")
+#dev.off()
+```
+
+```{r}
+#### make a basic RS and RRS tables, limited to comparisons of interest
+makeRStable = function(d)
+{
+  rst = by(d,d[,c("Year.off")],FUN=function(x) t.test(noff.off~Origin_ped.off,data=x))
+  rst
+  rsn = by(d,d[,c("Year.off","Origin_ped.off")],FUN=function(x) nrow(x))
+  dimnames(rsn)
+  Nhat = rsn[,1]
+  Nwild = rsn[,2]
+  
+  years = unlist(dimnames(rst)[1])
+  hatmeans = unlist(lapply(rst,function(x) x$estimate[1]))
+  wildmeans = unlist(lapply(rst,function(x) x$estimate[2]))
+  pvals = unlist(lapply(rst,function(x) x$p.value))
+  rrs = hatmeans/wildmeans
+  basicrrs = data.frame(Year=years, Hatchery_N = Nhat, Hatchery_RS = hatmeans, Wild_N = Nwild, Wild_RS=wildmeans, RRS = rrs, P_value=pvals,row.names = NULL)
+  return(basicrrs)
+}
+```
+
+### Table of RS and RRS by year, for males in the stream environment
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Sex_Final.off=="Male")
+RS.male.stream = makeRStable(d)
+RS.male.stream
+write.csv(RS.male.stream,"RRS table males stream origin_ped.csv")
+```
+
+### Table of RS and RRS by year, for females in the stream environment
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Sex_Final.off=="Female")
+RS.female.stream = makeRStable(d)
+RS.female.stream
+write.csv(RS.female.stream,"RRS table females stream origin_ped.csv")
+```
+
+### Table of RS and RRS by year, for males in the broodstock
+
+```{r}
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Sex_Final.off=="Male")
+RS.male.brood = makeRStable(d)
+RS.male.brood
+write.csv(RS.male.brood,"RRS males brood origin_ped.csv")
+```
+
+### Table of RS and RRS by year, for females in the broodstock
+
+```{r}
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Sex_Final.off=="Female")
+RS.female.brood = makeRStable(d)
+RS.female.brood
+write.csv(RS.female.brood,"RRS females brood origin_ped.csv")
+```
+
+```{r}
+#### look at the effects of parental origin (=grandparent spawning location) on RS
+# first create a new column that provides parental origin
+pedf$Origin.parents = ifelse(!is.na(pedf$Origin_ped.dam) & !is.na(pedf$Origin_ped.sire),paste(pedf$Origin_ped.dam,pedf$Origin_ped.sire,sep="-"),NA)
+
+makeRSGEN2table = function(d)
+{
+  rst = by(d,d[,c("Year.off")],FUN=function(x) summary(lm(noff.off~Origin.parents,data=x)))
+  rst[[1]]$coefficients
+  rsn = by(d,d[,c("Year.off","Origin.parents")],FUN=function(x) nrow(x))
+  dimnames(rsn)
+  Nhathat = rsn[,1]
+  Nhatwild = rsn[,2]
+  Nwildhat = rsn[,3]
+  Nwildwild = rsn[,4]
+  
+  years = unlist(dimnames(rst)[1])
+  hathatmeans = unlist(lapply(rst,function(x) x$coefficients[1,1]))
+  hatwildmeans = unlist(lapply(rst,function(x) x$coefficients[2,1])) + hathatmeans
+  wildhatmeans = unlist(lapply(rst,function(x) x$coefficients[3,1])) + hathatmeans
+  wildwildmeans = unlist(lapply(rst,function(x) x$coefficients[4,1])) + hathatmeans
+  pvalhatwild = unlist(lapply(rst,function(x) x$coefficients[2,4]))
+  pvalwildhat = unlist(lapply(rst,function(x) x$coefficients[3,4]))
+  pvalwildwild = unlist(lapply(rst,function(x) x$coefficients[4,4]))
+  rrsHW = hatwildmeans/hathatmeans
+  rrsWH = wildhatmeans/hathatmeans
+  rrsWW = wildwildmeans/hathatmeans
+  basicrrs = data.frame(Year=years, HH_N = Nhathat,HW_N=Nhatwild,WH_N=Nwildhat,WW_N=Nwildwild,HH_RS=hathatmeans, HW_RS = hatwildmeans,WH_RS=wildhatmeans,WW_RS=wildwildmeans, RRS_HW = rrsHW,RRS_WH=rrsWH,RRS_WW=rrsWW, P_value_HW=pvalhatwild,P_value_WH=pvalwildhat,P_value_WW=pvalwildwild,row.names = NULL)
+  return(basicrrs)
+}
+```
+
+### Annual table for 2 generation RRS in the stream environment
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Spawning Grounds" &  Final_Status.sire=="Spawning Grounds" )
+RSgen2.both.stream = makeRSGEN2table(d)
+RSgen2.both.stream
+```
+
+### 2 generation RRS in the stream environment, all years combined
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Final_Status.dam=="Spawning Grounds" &  Final_Status.sire=="Spawning Grounds")
+RSgen2.both.stream.allyears = lm(noff.off~Origin.parents,data=d)
+summary(RSgen2.both.stream.allyears)
+```
+
+### 2 generation RRS in the broodstock , all years combined
+
+```{r}
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Final_Status.dam=="Broodstock" &  Final_Status.sire=="Broodstock" )
+RSgen2.both.brood.allyears = lm(noff.off~Origin.parents,data=d)
+summary(RSgen2.both.brood.allyears)
+```
+
+### Effects of number of wild grandparents on RRS
+
+```{r}
+### note - this file was created using the field-only origin - not ped-corrected
+anc = read.csv("Ancestor_origins_1.22.25.csv",stringsAsFactors = F)
+pedf = merge(pedf,anc,by="id",all.x=T)
+```
+
+### Both sexes, stream environment
+
+```{r}
+# both sexes, spawning grounds
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & N.wild.gp>0)
+GPlm = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlm)
+```
+
+```{r}
+# males, spawning grounds
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & N.wild.gp>0 & Sex_Final.off=="Male")
+GPlm.male = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlm.male)
+```
+
+```{r}
+# females, spawning grounds
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & N.wild.gp>0 & Sex_Final.off=="Female")
+GPlm.female = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlm.female)
+```
+
+### In the broodstock...
+
+```{r}
+# both, brood
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & N.wild.gp>0)
+GPlmbrood = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlmbrood)
+```
+
+```{r}
+# males, brood
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & N.wild.gp>0 & Sex_Final.off=="Male")
+GPlmbrood.male = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlmbrood.male)
+```
+
+```{r}
+# females, brood
+d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & N.wild.gp>0 & Sex_Final.off=="Female")
+GPlmbrood.female = lm(noff.off~as.factor(N.wild.gp),data=d)
+summary(GPlmbrood.female)
+```
+
+### Graphs of relationships between RS and traits
+
+Male run timing, stream environment
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status_ped.off=="Spawning Grounds" & Sex_Final.off=="Male")
+rt.plot.males.stream = ggplot(data=d,aes(x=Dayofyear.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off) 
+rt.plot.males.stream
+```
+
+Male POH, stream environment
+
+```{r}
+POH.plot.males.stream = ggplot(data=d,aes(x=POH.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+POH.plot.males.stream
+```
+
+```{r}
+d = subset(pedf,Year.off <= 2013 & Final_Status_ped.off=="Broodstock" & Sex_Final.off=="Male")
+rt.plot.males.brood = ggplot(data=d,aes(x=Dayofyear.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+POH.plot.males.brood = ggplot(data=d,aes(x=POH.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+```
+
+Male run timing, in broodstock
+
+```{r}
+rt.plot.males.brood
+```
+
+Male POH, in broostock
+
+```{r}
+POH.plot.males.brood
+```
+
+```{r}
+d = subset(pedf,Year.off <= 2018 & Final_Status_ped.off=="Spawning Grounds" & Sex_Final.off=="Female")
+rt.plot.females.stream = ggplot(data=d,aes(x=Dayofyear.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off) 
+POH.plot.females.stream = ggplot(data=d,aes(x=POH.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+```
+
+Female run timing, stream environment
+
+```{r}
+rt.plot.females.stream
+```
+
+Female POH, stream environment
+
+```{r}
+POH.plot.females.stream
+```
+
+```{r}
+d = subset(pedf,Year.off <= 2013 & Final_Status_ped.off=="Broodstock" & Sex_Final.off=="Female")
+rt.plot.females.brood = ggplot(data=d,aes(x=Dayofyear.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+POH.plot.females.brood = ggplot(data=d,aes(x=POH.off,y=noff.off))  + geom_smooth(method="loess") + facet_wrap(~Year.off)
+```
+
+Female run timing, broodstock
+
+```{r}
+rt.plot.females.brood
+```
+
+Female POH, broostock
+
+```{r}
+POH.plot.females.brood
+```
