@@ -59,6 +59,18 @@ temp = as.Date(temp,format="%m/%d/%Y")
 dayofyear = pedf$Date.off - temp
 pedf$Dayofyear.off = dayofyear
 
+pedf$Date.sire = as.Date(pedf$Date.sire,format = '%m/%d/%y')
+temp = paste("1/1/",pedf$Year.sire,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = pedf$Date.sire - temp
+pedf$Dayofyear.sire = dayofyear
+
+pedf$Date.dam = as.Date(pedf$Date.dam,format = '%m/%d/%y')
+temp = paste("1/1/",pedf$Year.dam,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = pedf$Date.dam - temp
+pedf$Dayofyear.dam = dayofyear
+
 #pdf("run time by year.pdf")
 ggplot(data=pedf,aes(y=as.factor(Year.off),x=Dayofyear.off)) + geom_violin(draw_quantiles = .5)
 #dev.off()
@@ -212,6 +224,57 @@ summary(RSgen2.both.stream.allyears)
 d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Final_Status.dam=="Broodstock" &  Final_Status.sire=="Broodstock" )
 RSgen2.both.brood.allyears = lm(noff.off~Origin.parents,data=d)
 summary(RSgen2.both.brood.allyears)
+```
+
+### Try to make a figure illustrating how origin and location change over time
+
+```{r}
+
+d = subset(pedf,Year.off <=2018)
+nrow(d)
+d = subset(d,!is.na(sire) & !is.na(dam))
+nrow(d)
+
+d$Dayofyear.off = as.integer(d$Dayofyear.off)
+d$Dayofyear.dam = as.integer(d$Dayofyear.dam)
+d$Dayofyear.sire = as.integer(d$Dayofyear.sire)
+
+
+d$Dayofyear.off = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$Dayofyear.off,d$Dayofyear.off)
+d$Dayofyear.dam = ifelse(d$Final_Status_ped.dam=="Broodstock",-1*d$Dayofyear.dam,d$Dayofyear.dam)
+d$Dayofyear.sire = ifelse(d$Final_Status_ped.sire=="Broodstock",-1*d$Dayofyear.sire,d$Dayofyear.sire)
+
+nudge = .05
+d$Year.off = ifelse(d$Origin_ped.off=="Hatchery",d$Year.off + nudge,d$Year.off-nudge)
+d$Year.dam = ifelse(d$Origin_ped.dam=="Hatchery",d$Year.dam + nudge,d$Year.dam-nudge)
+d$Year.sire = ifelse(d$Origin_ped.sire=="Hatchery",d$Year.sire + nudge,d$Year.sire-nudge)
+
+
+plot = ggplot(data=d,aes(y=Year.off,x=Dayofyear.off,color=Origin_ped.off)) + geom_segment(xend = d$Dayofyear.sire,yend = d$Year.sire,color="olivedrab",alpha=.1,linewidth=.05) + ylab("Year") + geom_segment(xend = d$Dayofyear.dam,yend = d$Year.dam,color="olivedrab",alpha=.1,linewidth=.05) +  geom_point(alpha=.2,size=1,pch=16) + xlab("Day of year")  + ylab("Year") + xlab("Day of year") + scale_color_manual(values=c("indianred","lightsteelblue"))
+plot
+
+pdf("Wenatchee_pedigree_figure1.pdf",width=10,height=8)
+plot
+dev.off()
+
+
+
+```
+
+Try using the id numbers instead of the day of year - not as nice
+
+```{r}
+d = subset(pedf,Year.off <=2018)
+d$idnum = as.integer(substr(d$id,6,9))
+d$damnum = as.integer(substr(d$dam,6,9))
+d$sirenum = as.integer(substr(d$sire,6,9))
+
+d$idnum = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$idnum,d$idnum)
+d$damnum = ifelse(d$Final_Status_ped.dam=="Broodstock",-1*d$damnum,d$damnum)
+d$sirenum = ifelse(d$Final_Status_ped.sire=="Broodstock",-1*d$sirenum,d$sirenum)
+
+ggplot(data=d,aes(y=Year.off,x=idnum,color=Origin_ped.off)) + geom_point(alpha=.8,size=.5) + scale_color_manual(values = c("red","blue")) + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="grey",alpha=.05) + ylab("Year") + xlab("Day of year")
+
 ```
 
 ### Effects of number of wild grandparents on RRS
