@@ -1,5 +1,5 @@
-Monitoring the reproductive success of naturally spawning hatchery and natural spring Chinook salmon in the Wenatchee River
+## Monitoring the reproductive success of naturally spawning hatchery and natural spring Chinook salmon in the Wenatchee River
 
-BPA Project # 2003-039-00
+BPA Project \# 2003-039-00
 
-
+This project addresses a key uncertainty for evaluating whether hatchery supplementation programs have a net positive contribution to recovery of listed populations.  Specifically, what is the relative reproductive success of naturally spawning hatchery fish and what are causes of poor reproductive success of hatchery fish?  We are addressing these questions by focusing on the spring Chinook salmon in the Wenatchee River, part of the endangered Upper Columbia River spring Chinook salmon ESU. Our study design uses genetic parentage analysis to assign progeny (sampled at both the smolt and adult life stages) to naturally spawning hatchery and wild origin fish. The progeny counts for each spawner are a measure of reproductive success, and by comparing the mean reproductive success of hatchery and wild spawners, we obtain an estimate of the relative reproductive success (RRS) of the hatchery origin fish. A key part of the study is to include co-variables, such as age, size, run timing, spawning location, and spawning behavior, in the analysis so that the proximate causes of differences in RRS between hatchery and wild fish can be evaluated. The study was initiated in 2004 and collected samples through 2023. Prior work is summarized in various publications; this page contains in-progress analyses and results focused on the entire data set.
