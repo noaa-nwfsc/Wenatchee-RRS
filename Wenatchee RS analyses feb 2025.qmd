@@ -12,6 +12,9 @@ Michael Ford 2.17.25
 
 ```{r}
 library(ggplot2)
+library(cowplot)
+library(MASS)
+library(reshape2)
 
 ped = read.csv("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/pedigree_fitness_Tumwater_Grun_3.12.25.csv",stringsAsFactors = F)
 
@@ -24,7 +27,7 @@ pedf = subset(pedf,GRun.off == "Spring" )
 table(pedf$Final_Status.off)
 
 pedf = subset(pedf,Final_Status.off == "Broodstock" | Final_Status.off == "Spawning Grounds")
-table(pedf$Final_Status.off)
+table(pedf$Final_Status.off,pedf$Year.off)
 ```
 
 ### Summarize the number of location and origin calls that we changed due to location/origin contradictions
@@ -202,27 +205,47 @@ makeRSGEN2table = function(d)
 }
 ```
 
-### Annual table for 2 generation RRS in the stream environment
+### Annual table for 2 generation RRS in the stream environment - wild fish
 
 ```{r}
-d = subset(pedf,Year.off <= 2018 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Spawning Grounds" &  Final_Status.sire=="Spawning Grounds" )
-RSgen2.both.stream = makeRSGEN2table(d)
-RSgen2.both.stream
+d = subset(pedf,Year.off <= 2018 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Spawning Grounds" &  Final_Status_ped.sire=="Spawning Grounds")
+RStable = makeRSGEN2table(d)
+RStable
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS_HW" | variable=="RRS_WH" | variable=="RRS_WW")
+
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
 ```
 
 ### 2 generation RRS in the stream environment, all years combined
 
 ```{r}
 d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Final_Status.dam=="Spawning Grounds" &  Final_Status.sire=="Spawning Grounds")
-RSgen2.both.stream.allyears = lm(noff.off~Origin.parents,data=d)
+RSgen2.both.stream.allyears = glm.nb(noff.off~Origin.parents,data=d)
 summary(RSgen2.both.stream.allyears)
+```
+
+### Annual table for 2 generation RRS in the stream environment - hatchery fish
+
+```{r}
+d = subset(pedf,Year.off <= 2015 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Broodstock" &  Final_Status_ped.sire=="Broodstock")
+
+RStable = makeRSGEN2table(d)
+RStable
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS_HW" | variable=="RRS_WH" | variable=="RRS_WW")
+
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
+
 ```
 
 ### 2 generation RRS in the broodstock , all years combined
 
 ```{r}
 d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Final_Status.dam=="Broodstock" &  Final_Status.sire=="Broodstock" )
-RSgen2.both.brood.allyears = lm(noff.off~Origin.parents,data=d)
+RSgen2.both.brood.allyears = glm.nb(noff.off~Origin.parents,data=d)
 summary(RSgen2.both.brood.allyears)
 ```
 
@@ -261,12 +284,12 @@ dev.off()
 
 ```
 
-Try using the ordered numbers instead of the day of year
+A version with ID numbers instead of the day of year
 
 ```{r}
 d = subset(pedf,Year.off <=2018)
 nrow(d)
-d = subset(d,!is.na(sire) & !is.na(dam))
+#d = subset(d,!is.na(sire) & !is.na(dam))
 
 d$num = as.integer(substr(d$id,6,9)) + 1000
 d$sirenum = as.integer(substr(d$sire,6,9)) + 1000
@@ -282,23 +305,24 @@ d$Year.off = ifelse(d$Origin_ped.off=="Hatchery",d$Year.off + nudge,d$Year.off-n
 d$Year.dam = ifelse(d$Origin_ped.dam=="Hatchery",d$Year.dam + nudge,d$Year.dam-nudge)
 d$Year.sire = ifelse(d$Origin_ped.sire=="Hatchery",d$Year.sire + nudge,d$Year.sire-nudge)
 
-plot = ggplot(data=d,aes(y=Year.off,x=num,color=Origin_ped.off)) + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="olivedrab",alpha=.1,linewidth=.05) + ylab("Year") + geom_segment(xend = d$damnum,yend = d$Year.dam,color="olivedrab",alpha=.1,linewidth=.05) +  geom_point(alpha=.6,size=1,pch=16) + xlab("Spawners")  + ylab("Year") + scale_color_manual(values=c("indianred","lightsteelblue"))
-plot
+plot = ggplot(data=d,aes(y=Year.off,x=num,color=Origin_ped.off))  + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="olivedrab",alpha=.1,linewidth=.05) + ylab("Year") + geom_segment(xend = d$damnum,yend = d$Year.dam,color="olivedrab",alpha=.1,linewidth=.05) +  geom_point(alpha=.6,size=.5,pch=16) + xlab("Spawners")  + ylab("Year") + scale_color_manual(values=c("indianred","lightsteelblue"))  + theme_cowplot() + theme(axis.text.x=element_blank()) + annotate("text",x=-6000,y=2018,label="Broodstock") + annotate("text",x=6000,y=2018,label="Spawning grounds") + theme(legend.position = "none") 
+plot 
 
 pdf("Wenatchee_pedigree_figure_idnums.pdf",width=10,height=8)
 plot
 dev.off()
 
+ 
 
 ```
 
-### Effects of number of wild grandparents on RRS
+### Effects of number of wild (or hatchery) grandparents on RRS
 
 ```{r}
 ### note - this file was created using the field-only origin - not ped-corrected
 anc = read.csv("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Ancestor_origins_1.22.25.csv",stringsAsFactors = F)
 pedf = merge(pedf,anc,by="id",all.x=T)
-write.csv(pedf,"pedf_with_anc.csv",row.names = F)
+#write.csv(pedf,"pedf_with_anc.csv",row.names = F)
 ```
 
 Identify individuals with varying number of hatchery or wild grandparents or other ancestors, for potential WGS analysis.
@@ -307,6 +331,8 @@ In the file below, the *wild_parents_and_grandparents.csv* file contains fish wi
 
 The files *wild_lineages.csv* and *hatchery_lineages.csv* contain fish with only wild or only hatchery ancestry. Note that ancestry information is incomplete, however.
 
+Make some files for Joanna for potential WGS selection:
+
 ```{r}
 wild4 = subset(pedf,N.wild.gp == 4 & Origin_ped.sire=="Wild"&Origin_ped.dam=="Wild")
 nrow(wild4)
@@ -314,32 +340,28 @@ table(wild4$Year.off)
 hat4 = subset(pedf,N.hatchery.gp == 4 & Origin_ped.sire=="Hatchery" & Origin_ped.dam=="Hatchery")
 nrow(hat4)
 table(hat4$Year.off)
-write.csv(wild4,"wild_parents_and_grandparents.csv",row.names = F)
-write.csv(hat4,"hat_parents_and_grandparents.csv",row.names = F)
+#write.csv(wild4,"wild_parents_and_grandparents.csv",row.names = F)
+#write.csv(hat4,"hat_parents_and_grandparents.csv",row.names = F)
 
 wildonly = subset(pedf,anc.ratio==1 & Origin_ped.sire=="Wild" & Origin_ped.dam == "Wild")
 nrow(wildonly)
 hatonly = subset(pedf,anc.ratio==0 & Origin_ped.sire == "Hatchery" & Origin_ped.dam=="Hatchery")
 table(wildonly$N.wild.anc)
 table(hatonly$N.hatchery.anc)
-write.csv(wildonly,"wild_lineages.csv",row.names = F)
-write.csv(hatonly,"hat_lineages.csv",row.names = F)
+#write.csv(wildonly,"wild_lineages.csv",row.names = F)
+#write.csv(hatonly,"hat_lineages.csv",row.names = F)
 ```
 
-### Both sexes, stream environment
+### Both sexes, stream environment - number of wild grandparents
 
 ```{r}
 # both sexes, spawning grounds
-d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & N.wild.gp>0)
-GPlm = lm(noff.off~as.factor(N.wild.gp),data=d)
-summary(GPlm)
-```
-
-```{r}
-# males, spawning grounds
-d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & N.wild.gp>0 & Sex_Final.off=="Male")
-GPlm.male = lm(noff.off~as.factor(N.wild.gp),data=d)
-summary(GPlm.male)
+d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds"  & Origin_ped.sire=="Wild"&Origin_ped.dam=="Wild")
+nrow(d)
+table(d$N.wild.gp,d$Year.off)
+GPglm = glm.nb(noff.off~(N.wild.gp),data=d)
+summary(GPglm)
+ggplot(data=d,aes(x=as.factor(N.wild.gp),y=noff.off)) + geom_violin()
 ```
 
 ```{r}
