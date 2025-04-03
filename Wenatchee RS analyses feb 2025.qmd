@@ -234,10 +234,10 @@ d = subset(pedf,Year.off <=2018)
 nrow(d)
 d = subset(d,!is.na(sire) & !is.na(dam))
 nrow(d)
-
-d$Dayofyear.off = as.integer(d$Dayofyear.off)
-d$Dayofyear.dam = as.integer(d$Dayofyear.dam)
-d$Dayofyear.sire = as.integer(d$Dayofyear.sire)
+# convert day of year to integer, and substract 100 -- is now days after April 10
+d$Dayofyear.off = as.integer(d$Dayofyear.off-100)
+d$Dayofyear.dam = as.integer(d$Dayofyear.dam-100)
+d$Dayofyear.sire = as.integer(d$Dayofyear.sire-100)
 
 
 d$Dayofyear.off = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$Dayofyear.off,d$Dayofyear.off)
@@ -261,19 +261,34 @@ dev.off()
 
 ```
 
-Try using the id numbers instead of the day of year - not as nice
+Try using the ordered numbers instead of the day of year
 
 ```{r}
 d = subset(pedf,Year.off <=2018)
-d$idnum = as.integer(substr(d$id,6,9))
-d$damnum = as.integer(substr(d$dam,6,9))
-d$sirenum = as.integer(substr(d$sire,6,9))
+nrow(d)
+d = subset(d,!is.na(sire) & !is.na(dam))
 
-d$idnum = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$idnum,d$idnum)
+d$num = substr(d$id,6,9)
+d$sirenum = substr(d$sire,6,9)
+d$damnum = substr(d$dam,6,9)
+
+d$num = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$num,d$num)
 d$damnum = ifelse(d$Final_Status_ped.dam=="Broodstock",-1*d$damnum,d$damnum)
 d$sirenum = ifelse(d$Final_Status_ped.sire=="Broodstock",-1*d$sirenum,d$sirenum)
 
-ggplot(data=d,aes(y=Year.off,x=idnum,color=Origin_ped.off)) + geom_point(alpha=.8,size=.5) + scale_color_manual(values = c("red","blue")) + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="grey",alpha=.05) + ylab("Year") + xlab("Day of year")
+
+nudge = .05
+d$Year.off = ifelse(d$Origin_ped.off=="Hatchery",d$Year.off + nudge,d$Year.off-nudge)
+d$Year.dam = ifelse(d$Origin_ped.dam=="Hatchery",d$Year.dam + nudge,d$Year.dam-nudge)
+d$Year.sire = ifelse(d$Origin_ped.sire=="Hatchery",d$Year.sire + nudge,d$Year.sire-nudge)
+
+plot = ggplot(data=d,aes(y=Year.off,x=num,color=Origin_ped.off)) + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="olivedrab",alpha=.1,linewidth=.05) + ylab("Year") + geom_segment(xend = d$damnum,yend = d$Year.dam,color="olivedrab",alpha=.1,linewidth=.05) +  geom_point(alpha=.2,size=1,pch=16) + xlab("Day of year")  + ylab("Year") + xlab("Day of year") + scale_color_manual(values=c("indianred","lightsteelblue"))
+plot
+
+pdf("Wenatchee_pedigree_figure_idnums.pdf",width=10,height=8)
+plot
+dev.off()
+
 
 ```
 
