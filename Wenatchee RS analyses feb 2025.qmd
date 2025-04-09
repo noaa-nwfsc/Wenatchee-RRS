@@ -141,42 +141,65 @@ makeRStable = function(d)
 
 ```{r}
 d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Sex_Final.off=="Male")
-RS.male.stream = makeRStable(d)
-RS.male.stream
-write.csv(RS.male.stream,"RRS table males stream origin_ped.csv")
+RStable = makeRStable(d)
+RStable
+write.csv(RStable,"RRS table males stream origin_ped.csv")
+
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS")
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
 ```
 
 ### Table of RS and RRS by year, for females in the stream environment
 
 ```{r}
 d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Sex_Final.off=="Female")
-RS.female.stream = makeRStable(d)
-RS.female.stream
-write.csv(RS.female.stream,"RRS table females stream origin_ped.csv")
+RStable = makeRStable(d)
+RStable
+write.csv(RStable,"RRS table females stream origin_ped.csv")
+
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS")
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
+
 ```
 
 ### Table of RS and RRS by year, for males in the broodstock
 
 ```{r}
 d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Sex_Final.off=="Male")
-RS.male.brood = makeRStable(d)
-RS.male.brood
-write.csv(RS.male.brood,"RRS males brood origin_ped.csv")
+RStable = makeRStable(d)
+RStable
+write.csv(RStable,"RRS males brood origin_ped.csv")
+
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS")
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
+
 ```
 
 ### Table of RS and RRS by year, for females in the broodstock
 
 ```{r}
 d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Sex_Final.off=="Female")
-RS.female.brood = makeRStable(d)
-RS.female.brood
-write.csv(RS.female.brood,"RRS females brood origin_ped.csv")
+RStable = makeRStable(d)
+RStable
+write.csv(RStable,"RRS females brood origin_ped.csv")
+
+RStableL = melt(RStable,id.vars = "Year")
+RStableL = subset(RStableL,variable == "RRS")
+
+ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
 ```
 
 ```{r}
 #### look at the effects of parental origin (=grandparent spawning location) on RS
 # first create a new column that provides parental origin
 pedf$Origin.parents = ifelse(!is.na(pedf$Origin_ped.dam) & !is.na(pedf$Origin_ped.sire),paste(pedf$Origin_ped.dam,pedf$Origin_ped.sire,sep="-"),NA)
+
 
 makeRSGEN2table = function(d)
 {
@@ -218,18 +241,10 @@ RStableL = subset(RStableL,variable == "RRS_HW" | variable=="RRS_WH" | variable=
 ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
 ```
 
-### 2 generation RRS in the stream environment, all years combined
-
-```{r}
-d = subset(pedf,Year.off <= 2018 & Final_Status.off=="Spawning Grounds" & Final_Status.dam=="Spawning Grounds" &  Final_Status.sire=="Spawning Grounds")
-RSgen2.both.stream.allyears = glm.nb(noff.off~Origin.parents,data=d)
-summary(RSgen2.both.stream.allyears)
-```
-
 ### Annual table for 2 generation RRS in the stream environment - hatchery fish
 
 ```{r}
-d = subset(pedf,Year.off <= 2015 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Broodstock" &  Final_Status_ped.sire=="Broodstock")
+d = subset(pedf,Year.off <= 2015 & Year.off >2006 & Final_Status_ped.off=="Spawning Grounds" & Final_Status_ped.dam=="Broodstock" &  Final_Status_ped.sire=="Broodstock")
 
 RStable = makeRSGEN2table(d)
 RStable
@@ -239,14 +254,6 @@ RStableL = subset(RStableL,variable == "RRS_HW" | variable=="RRS_WH" | variable=
 
 ggplot(data = RStableL,aes(x=Year,y=value,fill=variable)) + geom_col(position=position_dodge()) + geom_hline(yintercept = 1)
 
-```
-
-### 2 generation RRS in the broodstock , all years combined
-
-```{r}
-d = subset(pedf,Year.off <= 2013 & Final_Status.off=="Broodstock" & Final_Status.dam=="Broodstock" &  Final_Status.sire=="Broodstock" )
-RSgen2.both.brood.allyears = glm.nb(noff.off~Origin.parents,data=d)
-summary(RSgen2.both.brood.allyears)
 ```
 
 ### Try to make a figure illustrating how origin and location change over time
@@ -291,9 +298,9 @@ d = subset(pedf,Year.off <=2018)
 nrow(d)
 #d = subset(d,!is.na(sire) & !is.na(dam))
 
-d$num = as.integer(substr(d$id,6,9)) + 1000
-d$sirenum = as.integer(substr(d$sire,6,9)) + 1000
-d$damnum = as.integer(substr(d$dam,6,9)) + 1000
+d$num = as.integer(substr(d$id,6,9)) + 1500
+d$sirenum = as.integer(substr(d$sire,6,9)) + 1500
+d$damnum = as.integer(substr(d$dam,6,9)) + 1500
 
 d$num = ifelse(d$Final_Status_ped.off=="Broodstock",-1*d$num,d$num)
 d$damnum = ifelse(d$Final_Status_ped.dam=="Broodstock",-1*d$damnum,d$damnum)
@@ -305,10 +312,10 @@ d$Year.off = ifelse(d$Origin_ped.off=="Hatchery",d$Year.off + nudge,d$Year.off-n
 d$Year.dam = ifelse(d$Origin_ped.dam=="Hatchery",d$Year.dam + nudge,d$Year.dam-nudge)
 d$Year.sire = ifelse(d$Origin_ped.sire=="Hatchery",d$Year.sire + nudge,d$Year.sire-nudge)
 
-plot = ggplot(data=d,aes(y=Year.off,x=num,color=Origin_ped.off))  + geom_segment(xend = d$sirenum,yend = d$Year.sire,color="olivedrab",alpha=.1,linewidth=.05) + ylab("Year") + geom_segment(xend = d$damnum,yend = d$Year.dam,color="olivedrab",alpha=.1,linewidth=.05) +  geom_point(alpha=.6,size=.5,pch=16) + xlab("Spawners")  + ylab("Year") + scale_color_manual(values=c("indianred","lightsteelblue"))  + theme_cowplot() + theme(axis.text.x=element_blank()) + annotate("text",x=-6000,y=2018,label="Broodstock") + annotate("text",x=6000,y=2018,label="Spawning grounds") + theme(legend.position = "none") 
+plot = ggplot(data=d,aes(y=Year.off,x=num,color=Origin_ped.off,linewidth=Origin_ped.off,alpha=Origin_ped.off))  + geom_segment(xend = d$sirenum,yend = d$Year.sire) + ylab("Year") + geom_segment(xend = d$damnum,yend = d$Year.dam) +  geom_point(alpha=.6,size=.5,pch=16) + xlab("Spawners")  + ylab("Year") + scale_color_manual(values=c("indianred","royalblue"))  + theme_cowplot() + theme(axis.text.x=element_blank()) + annotate("text",x=-6000,y=2018,label="Broodstock") + annotate("text",x=6000,y=2018,label="Spawning grounds") + theme(legend.position = "none") + scale_linewidth_manual(values=c(.02,.03)) + scale_alpha_manual(values=c(.05,.07))
 plot 
 
-pdf("Wenatchee_pedigree_figure_idnums.pdf",width=10,height=8)
+pdf("Wenatchee_pedigree_figure_idnums.pdf",width=10,height=5)
 plot
 dev.off()
 
