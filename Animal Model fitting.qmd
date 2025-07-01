@@ -1,0 +1,198 @@
+---
+title: "Wenatchee animal model"
+embed-resources: true
+format: html
+editor: visual
+---
+
+## Load and format pedigree and data
+
+```{r}
+library(MCMCglmm)
+library(ggplot2)
+library(sequoia)
+library(pedtricks)
+setwd("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Git-Wenatchee-RRS")
+
+d = read.csv("pedigree_fitness_Tumwater_Grun_4.29.25.csv",stringsAsFactors = F,na.strings = "NA")
+d$id = as.factor(d$id)
+d$dam = as.factor(d$dam)
+d$sire = as.factor(d$sire)
+d = d[,c(3,1,2,4:ncol(d))]
+names(d)[1] = "animal"
+```
+
+## Filter pedigree down to the data of interest
+
+```{r}
+ped = d
+ped = subset(ped,Origin_ped.off == "Hatchery" | Origin_ped.off == "Wild")
+ped = subset(ped,!is.na(Origin_ped.off))
+ped = subset(ped,!is.na(Origin_ped.dam))
+ped = subset(ped,!is.na(Origin_ped.sire))
+ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+ped = subset(ped,GRun.off == "Spring" )
+ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+# limit to neither parent NA
+ped = subset(ped, !is.na(sire) & !is.na(dam))
+
+```
+
+Sample size per year
+
+```{r}
+table(ped$Final_Status_ped.off,ped$Year.off)
+```
+
+Total pedigree size
+
+```{r}
+nrow(ped)
+```
+
+## Format and complete pedigree
+
+```{r}
+pedf = fix_ped(ped)
+dfil = subset(d,animal %in% pedf$id)
+```
+
+## Fit animal models
+
+First, try fitting a very simple model on the small data set to see if it works. Will try to estimate the h2 of length. If model already exits, just load.
+
+```{r}
+load("model_all_two_parent.Rdata")
+```
+
+```{r eval = FALSE}
+
+prior1.1 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002)),
+  R = list(V = 1, nu = 0.002)
+)
+
+sml <- MCMCglmm(Fork.off ~ 1,
+                     random = ~animal, pedigree = pedf,
+                     data = dfil, nitt = 65000, thin = 50, burnin = 15000,
+                     prior = prior1.1, verbose = TRUE
+)
+save(sml,file="model_all_two_parent.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+plot(sml$Sol)
+```
+
+Plots of random effects
+
+```{r}
+plot(sml$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.sml <- sml$VCV[, "animal"] /
+  (sml$VCV[, "animal"] + sml$VCV[, "units"])
+plot(posterior.heritability.sml)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.sml)
+HPDinterval(posterior.heritability.sml, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(sml$VCV)
+```
+
+## A more complete model (model 2 from Joanna)
+
+load model if it already is run
+
+```{r}
+load("model.Asod.Rdata")
+```
+
+```{r eval = FALSE}
+
+priorR3 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G2 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = 0.002)),
+  R = list(R1 = list(V = diag(2), nu = 1.002), R2 = list(V = diag(2), nu = 1.002))
+)
+
+model.Asod <- MCMCglmm(Fork.off ~ Age.off,
+                      random = ~ idh(Sex_Final.off):animal + idh(Origin_ped.off):animal + dam,
+                      rcov = ~ idh(Sex_Final.off):units + idh(Origin_ped.off):units,
+                      family = "gaussian",
+                      pedigree = pedf, data = dfil,
+                      nitt = 65000, burnin = 1500, thin = 50,
+                      prior = priorR3, verbose = TRUE)
+save(model.Asod,file="model.Asod.Rdata")
+```
+
+Plot fixed effects
+
+```{r}
+plot(model.Asod$Sol)
+```
+
+Summary of random effects
+
+```{r}
+summary(model.Asod$VCV)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Asod$VCV)
+```
+
+H2 for hatchery females
+
+```{r}
+posterior.heritability.Asod.fem.hat <- (model.Asod$VCV[, "Sex_Final.offFemale.animal"] + model.Asod$VCV[,"Origin_ped.offHatchery.animal"])  /
+  (model.Asod$VCV[, "Sex_Final.offFemale.animal"] + model.Asod$VCV[,"Origin_ped.offHatchery.animal"] + model.Asod$VCV[,"dam"] + model.Asod$VCV[,"Sex_Final.offFemale.units"] + model.Asod$VCV[,"Origin_ped.offHatchery.units"] )
+plot(posterior.heritability.Asod.fem.hat)
+posterior.mode(posterior.heritability.Asod.fem.hat)
+HPDinterval(posterior.heritability.Asod.fem.hat, 0.95)
+```
+
+H2 for hatchery males
+
+```{r}
+posterior.heritability.Asod.male.hat <- (model.Asod$VCV[, "Sex_Final.offMale.animal"] + model.Asod$VCV[,"Origin_ped.offHatchery.animal"])  /
+  (model.Asod$VCV[, "Sex_Final.offMale.animal"] + model.Asod$VCV[,"Origin_ped.offHatchery.animal"] + model.Asod$VCV[,"dam"] + model.Asod$VCV[,"Sex_Final.offMale.units"] + model.Asod$VCV[,"Origin_ped.offHatchery.units"] )
+
+plot(posterior.heritability.Asod.male.hat)
+posterior.mode(posterior.heritability.Asod.male.hat)
+HPDinterval(posterior.heritability.Asod.male.hat, 0.95)
+```
+
+H2 for wild females
+
+```{r}
+posterior.heritability.Asod.fem.wild <- (model.Asod$VCV[, "Sex_Final.offFemale.animal"] + model.Asod$VCV[,"Origin_ped.offWild.animal"])  /
+  (model.Asod$VCV[, "Sex_Final.offFemale.animal"] + model.Asod$VCV[,"Origin_ped.offWild.animal"] + model.Asod$VCV[,"dam"] + model.Asod$VCV[,"Sex_Final.offFemale.units"] + model.Asod$VCV[,"Origin_ped.offWild.units"] )
+plot(posterior.heritability.Asod.fem.wild)
+posterior.mode(posterior.heritability.Asod.fem.wild)
+HPDinterval(posterior.heritability.Asod.fem.wild, 0.95)
+```
+
+H2 for wild males
+
+```{r}
+posterior.heritability.Asod.male.wild <- (model.Asod$VCV[, "Sex_Final.offMale.animal"] + model.Asod$VCV[,"Origin_ped.offWild.animal"])  /
+  (model.Asod$VCV[, "Sex_Final.offMale.animal"] + model.Asod$VCV[,"Origin_ped.offWild.animal"] + model.Asod$VCV[,"Origin_ped.offWild.animal"] + model.Asod$VCV[,"dam"] + model.Asod$VCV[,"Sex_Final.offMale.units"] + model.Asod$VCV[,"Origin_ped.offWild.units"] )
+plot(posterior.heritability.Asod.male.wild)
+posterior.mode(posterior.heritability.Asod.male.wild)
+HPDinterval(posterior.heritability.Asod.male.wild, 0.95)
+```
