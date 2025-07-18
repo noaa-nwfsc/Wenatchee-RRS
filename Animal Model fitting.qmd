@@ -33,15 +33,16 @@ ped = subset(ped,!is.na(Origin_ped.sire))
 ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
 ped = subset(ped,GRun.off == "Spring" )
 ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+ped = subset(ped,Year.off <=2018 & Year.off >= 2008) # after this hatchery fish were not sampled
 # limit to neither parent NA
-ped = subset(ped, !is.na(sire) & !is.na(dam))
+ped = subset(ped, !is.na(sire) & !is.na(dam)) ### try not doing this
 
 ```
 
 Sample size per year
 
 ```{r}
-table(ped$Final_Status_ped.off,ped$Year.off)
+table(ped$Sex_Field.off,ped$Year.off)
 ```
 
 Total pedigree size
@@ -54,7 +55,10 @@ nrow(ped)
 
 ```{r}
 pedf = fix_ped(ped)
-dfil = subset(d,animal %in% pedf$id)
+#dfil = subset(d,animal %in% pedf$id)
+dfil = ped
+
+table(dfil$Origin_ped.off,dfil$Year.off)
 ```
 
 ## Fit animal models
@@ -62,7 +66,7 @@ dfil = subset(d,animal %in% pedf$id)
 First, try fitting a very simple model on the small data set to see if it works. Will try to estimate the h2 of length. If model already exits, just load.
 
 ```{r}
-load("model_all_two_parent.Rdata")
+load("model.AsodY.A_as_factor_Y_as_factor.Rdata")
 ```
 
 ```{r eval = FALSE}
@@ -74,28 +78,30 @@ prior1.1 <- list(
 
 sml <- MCMCglmm(Fork.off ~ 1,
                      random = ~animal, pedigree = pedf,
-                     data = dfil, nitt = 65000, thin = 50, burnin = 15000,
+                     data = dfil, nitt = 2000, thin = 50, burnin = 100,
                      prior = prior1.1, verbose = TRUE
 )
-save(sml,file="model_all_two_parent.Rdata")
+#save(sml,file="model_all_two_parent.Rdata")
 ```
 
 Plots of fixed effects
 
 ```{r}
-plot(sml$Sol)
+par(mar=c(1,1,1,1))
+plot(model.AsodY$Sol)
 ```
 
 Plots of random effects
 
 ```{r}
-plot(sml$VCV)
+par(mar=c(1,1,1,1))
+plot(model.AsodY$VCV)
 ```
 
 Plot of h2
 
 ```{r}
-posterior.heritability.sml <- sml$VCV[, "animal"] /
+posterior.heritability.fkl <- sml$VCV[, "animal"] /
   (sml$VCV[, "animal"] + sml$VCV[, "units"])
 plot(posterior.heritability.sml)
 ```
@@ -110,7 +116,7 @@ HPDinterval(posterior.heritability.sml, 0.95)
 Autocorrelation stats
 
 ```{r}
-autocorr.diag(sml$VCV)
+autocorr.diag(model.AsodY$VCV)
 ```
 
 ## A more complete model (model 2 from Joanna)
@@ -142,6 +148,7 @@ Plot fixed effects
 
 ```{r}
 plot(model.Asod$Sol)
+summary(model.Asod$Sol)
 ```
 
 Summary of random effects
@@ -195,4 +202,52 @@ posterior.heritability.Asod.male.wild <- (model.Asod$VCV[, "Sex_Final.offMale.an
 plot(posterior.heritability.Asod.male.wild)
 posterior.mode(posterior.heritability.Asod.male.wild)
 HPDinterval(posterior.heritability.Asod.male.wild, 0.95)
+```
+
+## Model with year as random effect
+
+I have not been able to get this model to work...
+
+```{r}
+p.var = var(dfil$Fork.off,na.rm=T)
+p.var
+priorR4 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G2 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = .1), G4 = list(V = 1, nu = .1)),
+  R = list(R1 = list(V = diag(2), nu = 1.002), R2 = list(V = diag(2), nu = 1.002))
+)
+
+dfil$Year.off_asF = as.factor(dfil$Year.off)
+
+# test version that is very short to see if it will run
+model.Asody <- MCMCglmm(Fork.off ~ as.factor(Age.off),
+                      random = ~ idh(Sex_Final.off):animal + idh(Origin_ped.off):animal + dam + Year.off_asF,
+                      rcov = ~ idh(Sex_Final.off):units + idh(Origin_ped.off):units,
+                      family = "gaussian",
+                      pedigree = pedf, data = dfil,
+                      nitt = 200, burnin = 10, thin = 10,
+                      prior = priorR4, verbose = TRUE)
+#save(model.Asody,file="model.Asody.Rdata")
+```
+
+## Year as fixed effect
+
+```{r}
+priorR3 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G2 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = 0.002)),
+  R = list(R1 = list(V = diag(2), nu = 1.002), R2 = list(V = diag(2), nu = 1.002))
+)
+# test version that is very short to see if it will run
+model.AsodY <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                      random = ~ idh(Sex_Final.off):animal + idh(Origin_ped.off):animal + dam,
+                      rcov = ~ idh(Sex_Final.off):units + idh(Origin_ped.off):units,
+                      family = "gaussian",
+                      pedigree = pedf, data = dfil,
+                      nitt = 200, burnin = 50, thin = 10,
+                      prior = priorR3, verbose = TRUE)
+save(model.AsodY,file="model.AsodY.A_as_factor_Y_as_factor.Rdata")
+```
+
+```{r}
+summary(model.AsodY$Sol)
+summary(model.AsodY$VCV)
 ```
