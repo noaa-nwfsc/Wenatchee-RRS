@@ -82,44 +82,23 @@ names(dfil)
 summary(dfil$Dayofyear.off)
 ##### set up and run model
 
-##### set up and run fkl model - 
-##### male only
-
-dmal = subset(dfil,Sex_Final.off=="Male")
-pvar = var(dmal$Dayofyear.off,na.rm=T)
-
-priorR2 <- list(
-  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
-  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
-)
-
-# fork length model, age fixed effects and origin and year as random effects
-model.Adyo_RT_mal <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
-                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
-                           family = "gaussian",
-                           pedigree = pedf, data = dmal,
-                           nitt = 500000, burnin = 10000, thin = 500,
-                           prior = priorR2, verbose = TRUE)
-save(model.Adyo_RT_mal,file="model.Adyo_RT_mal.Rdata")
-
-##### set up and run fkl model - 
+##### set up and run weight model - 
 ##### female only
 
 dmal = subset(dfil,Sex_Final.off=="Female")
-pvar = var(dmal$Dayofyear.off,na.rm=T)
-
+pvar = var(dmal$Weight.off,na.rm=T)
+pvar
+summary(dmal$Weight.off)
 priorR2 <- list(
   G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
   R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
 )
 
-# fork length model, age fixed effects and origin and year as random effects
-model.Adyo_RT_fem <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
-                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
-                           family = "gaussian",
-                           pedigree = pedf, data = dmal,
-                           nitt = 500000, burnin = 10000, thin = 500,
-                           prior = priorR2, verbose = TRUE)
-save(model.Adyo_RT_fem,file="model.Adyo_RT_fem.Rdata")
-
-
+# Weight model, age fixed effects and origin and year as random effects
+model.Adyo_WT_fem <- MCMCglmm(Weight.off ~ as.factor(Age.off) ,
+                              random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                              family = "gaussian",
+                              pedigree = pedf, data = dmal,
+                              nitt = 500000, burnin = 10000, thin = 500,
+                              prior = priorR2, verbose = TRUE)
+save(model.Adyo_WT_fem,file="model.Adyo_WT_fem.Rdata")

@@ -7,7 +7,7 @@ ssh mford@sedna.nwfsc2.noaa.gov
 screen -h 10000
 screen -ls
 screen -d -R
-screen -d -r 3149168
+screen -d -r 4118683
 
 
 ### note use ctrl-a esc to enter scrolling mode and then just esc to exit scrolling mode
@@ -42,17 +42,6 @@ d$dam = as.factor(d$dam)
 d$sire = as.factor(d$sire)
 d = d[,c(3,1,2,4:ncol(d))]
 names(d)[1] = "animal"
-names(d)
-
-#### format run timing
-d$Date.off = as.Date(d$Date.off,format = '%m/%d/%y')
-temp = paste("1/1/",d$Year.off,sep="")
-temp = as.Date(temp,format="%m/%d/%Y")
-dayofyear = d$Date.off - temp
-d$Dayofyear.off = dayofyear
-d$Dayofyear = as.integer(d$Dayofyear)
-mean(d$Dayofyear.off,na.rm=T)
-sd(d$Dayofyear.off,na.rm=T)
 
 #### filter data
 
@@ -73,20 +62,17 @@ ped = subset(ped, !is.na(sire) & !is.na(dam)) ### try not doing this
 pedf = fix_ped(ped)
 #dfil = subset(d,animal %in% pedf$id)
 dfil = ped
-nrow(pedf)
-nrow(ped)
 
 table(dfil$Origin_ped.off,dfil$Year.off)
 
-names(dfil)
-summary(dfil$Dayofyear.off)
+
 ##### set up and run model
 
 ##### set up and run fkl model - 
 ##### male only
 
 dmal = subset(dfil,Sex_Final.off=="Male")
-pvar = var(dmal$Dayofyear.off,na.rm=T)
+pvar = var(dmal$Fork.off,na.rm=T)
 
 priorR2 <- list(
   G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
@@ -94,19 +80,19 @@ priorR2 <- list(
 )
 
 # fork length model, age fixed effects and origin and year as random effects
-model.Adyo_RT_mal <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
-                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
-                           family = "gaussian",
-                           pedigree = pedf, data = dmal,
-                           nitt = 500000, burnin = 10000, thin = 500,
-                           prior = priorR2, verbose = TRUE)
-save(model.Adyo_RT_mal,file="model.Adyo_RT_mal.Rdata")
+model.Adyo_mal <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                                random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                                family = "gaussian",
+                                pedigree = pedf, data = dmal,
+                                nitt = 500000, burnin = 10000, thin = 500,
+                                prior = priorR2, verbose = TRUE)
+save(model.Adyo_mal,file="model.Adyo_mal.Rdata")
 
 ##### set up and run fkl model - 
 ##### female only
 
 dmal = subset(dfil,Sex_Final.off=="Female")
-pvar = var(dmal$Dayofyear.off,na.rm=T)
+pvar = var(dmal$Fork.off,na.rm=T)
 
 priorR2 <- list(
   G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
@@ -114,12 +100,12 @@ priorR2 <- list(
 )
 
 # fork length model, age fixed effects and origin and year as random effects
-model.Adyo_RT_fem <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
-                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
-                           family = "gaussian",
-                           pedigree = pedf, data = dmal,
-                           nitt = 500000, burnin = 10000, thin = 500,
-                           prior = priorR2, verbose = TRUE)
-save(model.Adyo_RT_fem,file="model.Adyo_RT_fem.Rdata")
+model.Adyo_fem <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                                random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                                family = "gaussian",
+                                pedigree = pedf, data = dmal,
+                                nitt = 500000, burnin = 10000, thin = 500,
+                                prior = priorR2, verbose = TRUE)
+save(model.Adyo_fem,file="model.Adyo_fem.Rdata")
 
 

@@ -1,0 +1,296 @@
+---
+title: "Wenatchee animal model"
+embed-resources: true
+format: html
+editor: visual
+---
+
+## Load and format pedigree and data
+
+```{r}
+library(MCMCglmm)
+library(ggplot2)
+library(sequoia)
+library(pedtricks)
+setwd("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Git-Wenatchee-RRS")
+
+d = read.csv("pedigree_fitness_Tumwater_Grun_4.29.25.csv",stringsAsFactors = F,na.strings = "NA")
+d$id = as.factor(d$id)
+d$dam = as.factor(d$dam)
+d$sire = as.factor(d$sire)
+d = d[,c(3,1,2,4:ncol(d))]
+names(d)[1] = "animal"
+```
+
+## Filter pedigree down to the data of interest
+
+```{r}
+ped = d
+ped = subset(ped,Origin_ped.off == "Hatchery" | Origin_ped.off == "Wild")
+ped = subset(ped,!is.na(Origin_ped.off))
+ped = subset(ped,!is.na(Origin_ped.dam))
+ped = subset(ped,!is.na(Origin_ped.sire))
+ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+ped = subset(ped,GRun.off == "Spring" )
+ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+ped = subset(ped,Year.off <=2018 & Year.off >= 2008) # after this hatchery fish were not sampled
+# limit to neither parent NA
+ped = subset(ped, !is.na(sire) & !is.na(dam)) ### try not doing this
+
+```
+
+Sample size per year
+
+```{r}
+table(ped$Sex_Field.off,ped$Year.off)
+```
+
+Total pedigree size
+
+```{r}
+nrow(ped)
+```
+
+## Format and complete pedigree
+
+```{r}
+pedf = fix_ped(ped)
+#dfil = subset(d,animal %in% pedf$id)
+dfil = ped
+
+table(dfil$Origin_ped.off,dfil$Year.off)
+```
+
+## Fit animal models
+
+Models for fork length and run timing were run on sedna (run time approximately two weeks). The code is copied below but is not run in this document.
+
+Fork length
+
+```{r eval = FALSE}
+##### set up and run fkl model
+
+priorR3 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G2 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = 0.002)),
+  R = list(R1 = list(V = diag(2), nu = 1.002), R2 = list(V = diag(2), nu = 1.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AsodY <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ idh(Sex_Final.off):animal + idh(Origin_ped.off):animal + dam,
+                        rcov = ~ idh(Sex_Final.off):units + idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfil,
+                        nitt = 500000, burnin = 1000, thin = 500,
+                        prior = priorR3, verbose = TRUE)
+save(model.AsodY,file="model.AsodY.A_as_factor_Y_as_factor.Rdata")
+
+```
+
+Load model output here, copied from sedna
+
+```{r}
+load("model.AsodY.A_as_factor_Y_as_factor.Rdata")
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AsodY$VCV)
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AsodY$Sol)
+summary(model.AsodY$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AsodY$VCV)
+summary(model.AsodY$VCV)
+```
+
+Calculate and plot of h2
+
+Hatchery-origin males
+
+```{r}
+h2.fkl.hat.male <- (model.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.AsodY$VCV[,"Origin_ped.offHatchery.animal"]) /
+  (model.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.AsodY$VCV[,"Origin_ped.offHatchery.animal"] + model.AsodY$VCV[, "Sex_Final.offMale.units"] + model.AsodY$VCV[,"Origin_ped.offHatchery.units"]  + model.AsodY$VCV[, "dam"])
+plot(h2.fkl.hat.male)
+summary(h2.fkl.hat.male)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.fkl.hat.male)
+HPDinterval(h2.fkl.hat.male, 0.95)
+```
+
+Natural-origin males
+
+```{r}
+h2.fkl.nat.male <- (model.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.AsodY$VCV[,"Origin_ped.offWild.animal"]) /
+  (model.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.AsodY$VCV[,"Origin_ped.offWild.animal"] + model.AsodY$VCV[, "Sex_Final.offMale.units"] + model.AsodY$VCV[,"Origin_ped.offWild.units"]  + model.AsodY$VCV[, "dam"])
+plot(h2.fkl.nat.male)
+summary(h2.fkl.nat.male)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.fkl.nat.male)
+HPDinterval(h2.fkl.nat.male, 0.95)
+```
+
+Hatchery-origin females
+
+```{r}
+h2.fkl.hat.female <- (model.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.AsodY$VCV[,"Origin_ped.offHatchery.animal"]) /
+  (model.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.AsodY$VCV[,"Origin_ped.offHatchery.animal"] + model.AsodY$VCV[, "Sex_Final.offFemale.units"] + model.AsodY$VCV[,"Origin_ped.offHatchery.units"]  + model.AsodY$VCV[, "dam"])
+plot(h2.fkl.hat.female)
+
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.fkl.hat.female)
+HPDinterval(h2.fkl.hat.female, 0.95)
+```
+
+Natural-origin females
+
+```{r}
+h2.fkl.nat.female <- (model.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.AsodY$VCV[,"Origin_ped.offWild.animal"]) /
+  (model.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.AsodY$VCV[,"Origin_ped.offWild.animal"] + model.AsodY$VCV[, "Sex_Final.offFemale.units"] + model.AsodY$VCV[,"Origin_ped.offWild.units"]  + model.AsodY$VCV[, "dam"])
+plot(h2.fkl.nat.female)
+summary(h2.fkl.nat.female)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.fkl.nat.female)
+HPDinterval(h2.fkl.nat.female, 0.95)
+```
+
+Run timing
+
+```{r eval = FALSE}
+priorR3 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G2 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = 0.002)),
+  R = list(R1 = list(V = diag(2), nu = 1.002), R2 = list(V = diag(2), nu = 1.002))
+)
+
+# run timing model
+model.rt.AsodY <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ idh(Sex_Final.off):animal + idh(Origin_ped.off):animal + dam,
+                        rcov = ~ idh(Sex_Final.off):units + idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfil,
+                        nitt = 500000, burnin = 1000, thin = 500,
+                        prior = priorR3, verbose = TRUE)
+save(model.rt.AsodY,file="model.rt.AsodY.A_as_factor_Y_as_factor.Rdata")
+
+```
+
+Load model output here, copied from sedna
+
+```{r}
+load("model.rt.AsodY.A_as_factor_Y_as_factor.Rdata")
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.rt.AsodY$VCV)
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.rt.AsodY$Sol)
+summary(model.rt.AsodY$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.rt.AsodY$VCV)
+summary(model.rt.AsodY$VCV)
+```
+
+Calculate and plot of h2
+
+Hatchery-origin males
+
+```{r}
+h2.rt.hat.male <- (model.rt.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.animal"]) /
+  (model.rt.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.animal"] + model.rt.AsodY$VCV[, "Sex_Final.offMale.units"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.units"]  + model.rt.AsodY$VCV[, "dam"])
+plot(h2.rt.hat.male)
+summary(h2.rt.hat.male)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.rt.hat.male)
+HPDinterval(h2.rt.hat.male, 0.95)
+```
+
+Natural-origin males
+
+```{r}
+h2.rt.nat.male <- (model.rt.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.animal"]) /
+  (model.rt.AsodY$VCV[, "Sex_Final.offMale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.animal"] + model.rt.AsodY$VCV[, "Sex_Final.offMale.units"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.units"]  + model.rt.AsodY$VCV[, "dam"])
+plot(h2.rt.nat.male)
+summary(h2.rt.nat.male)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.rt.nat.male)
+HPDinterval(h2.rt.nat.male, 0.95)
+```
+
+Hatchery-origin females
+
+```{r}
+h2.rt.hat.female <- (model.rt.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.animal"]) /
+  (model.rt.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.animal"] + model.rt.AsodY$VCV[, "Sex_Final.offFemale.units"] + model.rt.AsodY$VCV[,"Origin_ped.offHatchery.units"]  + model.rt.AsodY$VCV[, "dam"])
+plot(h2.rt.hat.female)
+
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.rt.hat.female)
+HPDinterval(h2.rt.hat.female, 0.95)
+```
+
+Natural-origin females
+
+```{r}
+h2.rt.nat.female <- (model.rt.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.animal"]) /
+  (model.rt.AsodY$VCV[, "Sex_Final.offFemale.animal"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.animal"] + model.rt.AsodY$VCV[, "Sex_Final.offFemale.units"] + model.rt.AsodY$VCV[,"Origin_ped.offWild.units"]  + model.rt.AsodY$VCV[, "dam"])
+plot(h2.rt.nat.female)
+summary(h2.rt.nat.female)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(h2.rt.nat.female)
+HPDinterval(h2.rt.nat.female, 0.95)
+```

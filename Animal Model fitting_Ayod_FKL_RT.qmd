@@ -1,0 +1,619 @@
+---
+title: "Wenatchee animal model"
+embed-resources: true
+format: html
+editor: visual
+---
+
+## Load and format pedigree and data
+
+```{r}
+library(MCMCglmm)
+library(ggplot2)
+library(sequoia)
+library(pedtricks)
+library(cowplot)
+setwd("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Git-Wenatchee-RRS")
+
+d = read.csv("pedigree_fitness_Tumwater_Grun_4.29.25.csv",stringsAsFactors = F,na.strings = "NA")
+d$id = as.factor(d$id)
+d$dam = as.factor(d$dam)
+d$sire = as.factor(d$sire)
+d = d[,c(3,1,2,4:ncol(d))]
+names(d)[1] = "animal"
+
+#### format run timing
+d$Date.off = as.Date(d$Date.off,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.off,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.off - temp
+d$Dayofyear.off = dayofyear
+d$Dayofyear = as.integer(d$Dayofyear)
+mean(d$Dayofyear.off,na.rm=T)
+sd(d$Dayofyear.off,na.rm=T)
+```
+
+## Filter pedigree down to the data of interest
+
+```{r}
+ped = d
+ped = subset(ped,Origin_ped.off == "Hatchery" | Origin_ped.off == "Wild")
+ped = subset(ped,!is.na(Origin_ped.off))
+ped = subset(ped,!is.na(Origin_ped.dam))
+ped = subset(ped,!is.na(Origin_ped.sire))
+ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+ped = subset(ped,GRun.off == "Spring" )
+ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+ped = subset(ped,Year.off <=2018 & Year.off >= 2008) # after this hatchery fish were not sampled
+
+#ped = subset(ped,Year.off <=2012 & Year.off >= 2008) # or make a smaller pedigree for testing purposes
+
+# limit to neither parent NA
+ped = subset(ped, !is.na(sire) & !is.na(dam)) ### try not doing this
+
+```
+
+Sample size per year
+
+```{r}
+table(ped$Sex_Field.off,ped$Year.off)
+```
+
+Total pedigree size
+
+```{r}
+nrow(ped)
+```
+
+## Format and complete pedigree
+
+```{r}
+pedf = fix_ped(ped)
+#dfil = subset(d,animal %in% pedf$id)
+dfil = ped
+
+table(dfil$Origin_ped.off,dfil$Year.off)
+```
+
+## Fit animal models
+
+## Males only - year as random effect, origin as random effect - fork length
+
+```{r eval = FALSE}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+pvar = var(dmal$Fork.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_test_mal <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Adyo_test_mal,file="model1_Adyo_test_mal.Rdata")
+```
+
+```{r}
+#### load long run from sedna
+load("model.Adyo_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_mal$VCV)
+summary(model.Adyo_mal)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.fkl_mal_wild <- model.Adyo_mal$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_mal$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_mal$VCV[, "Origin_ped.offWild.units"] + model.Adyo_mal$VCV[, "dam"] + model.Adyo_mal$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.fkl_mal_wild)
+HPDinterval(posterior.heritability.fkl_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.fkl_mal_hat <- model.Adyo_mal$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_mal$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_mal$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_mal$VCV[, "dam"] + model.Adyo_mal$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.fkl_mal_hat)
+HPDinterval(posterior.heritability.fkl_mal_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_mal$VCV)
+```
+
+## Females only - year as random effect, origin as random effect - fork length
+
+```{r eval = FALSE}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dmal = subset(dfil,Sex_Final.off=="Female")
+pvar = var(dmal$Fork.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_test_fem <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Adyo_test_fem,file="model1_Adyo_test_fem.Rdata")
+```
+
+```{r}
+load("model.Adyo_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_fem$VCV)
+summary(model.Adyo_fem)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.fkl_fem_wild <- model.Adyo_fem$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_fem$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_fem$VCV[, "Origin_ped.offWild.units"] + model.Adyo_fem$VCV[, "dam"] + model.Adyo_fem$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_fem_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.fkl_fem_wild)
+HPDinterval(posterior.heritability.fkl_fem_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.fkl_fem_hat <- model.Adyo_fem$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_fem$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_fem$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_fem$VCV[, "dam"] + model.Adyo_fem$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_fem_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.fkl_fem_hat)
+HPDinterval(posterior.heritability.fkl_fem_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_fem$VCV)
+```
+
+## Males only - year as random effect, origin as random effect - run timing
+
+```{r eval = FALSE}
+##### set up and run run timing model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+pvar = var(dmal$Dayofyear.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+#  age fixed effects and origin and year as random effects
+model.Adyo_RT_mal <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
+                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                           family = "gaussian",
+                           pedigree = pedf, data = dmal,
+                           nitt = 500000, burnin = 10000, thin = 500,
+                           prior = priorR2, verbose = TRUE)
+save(model.Adyo_RT_mal,file="model.Adyo_RT_mal.Rdata")
+```
+
+```{r}
+#### load long run from sedna
+load("model.Adyo_RT_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_RT_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_RT_mal$VCV)
+summary(model.Adyo_RT_mal)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.RT_mal_wild <- model.Adyo_RT_mal$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_RT_mal$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_RT_mal$VCV[, "Origin_ped.offWild.units"] + model.Adyo_RT_mal$VCV[, "dam"] + model.Adyo_RT_mal$VCV[, "Year.off"])
+plot(posterior.heritability.RT_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.RT_mal_wild)
+HPDinterval(posterior.heritability.RT_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.RT_mal_hat <- model.Adyo_RT_mal$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_RT_mal$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_RT_mal$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_RT_mal$VCV[, "dam"] + model.Adyo_RT_mal$VCV[, "Year.off"])
+plot(posterior.heritability.RT_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.RT_mal_hat)
+HPDinterval(posterior.heritability.RT_mal_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_RT_mal$VCV)
+```
+
+## Females only - year as random effect, origin as random effect - run timing
+
+```{r eval = FALSE}
+dmal = subset(dfil,Sex_Final.off=="Female")
+pvar = var(dmal$Dayofyear.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_RT_fem <- MCMCglmm(Dayofyear.off ~ as.factor(Age.off) ,
+                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                           family = "gaussian",
+                           pedigree = pedf, data = dmal,
+                           nitt = 500000, burnin = 10000, thin = 500,
+                           prior = priorR2, verbose = TRUE)
+save(model.Adyo_RT_fem,file="model.Adyo_RT_fem.Rdata")
+```
+
+```{r}
+load("model.Adyo_RT_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_RT_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_RT_fem$VCV)
+summary(model.Adyo_RT_fem)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.RT_fem_wild <- model.Adyo_RT_fem$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_RT_fem$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_RT_fem$VCV[, "Origin_ped.offWild.units"] + model.Adyo_RT_fem$VCV[, "dam"] + model.Adyo_RT_fem$VCV[, "Year.off"])
+plot(posterior.heritability.RT_fem_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.RT_fem_wild)
+HPDinterval(posterior.heritability.RT_fem_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.RT_fem_hat <- model.Adyo_RT_fem$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_RT_fem$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_RT_fem$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_RT_fem$VCV[, "dam"] + model.Adyo_RT_fem$VCV[, "Year.off"])
+plot(posterior.heritability.RT_fem_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.RT_fem_hat)
+HPDinterval(posterior.heritability.RT_fem_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_RT_fem$VCV)
+```
+
+## Males only - year as random effect, origin as random effect - weight
+
+```{r eval = FALSE}
+##### set up and run weight model - 
+##### male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+pvar = var(dmal$Weight.off,na.rm=T)
+pvar
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# Weight model, age fixed effects and origin and year as random effects
+model.Adyo_WT_mal <- MCMCglmm(Weight.off ~ as.factor(Age.off) ,
+                           random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                           family = "gaussian",
+                           pedigree = pedf, data = dmal,
+                           nitt = 500000, burnin = 10000, thin = 500,
+                           prior = priorR2, verbose = TRUE)
+save(model.Adyo_WT_mal,file="model.Adyo_WT_mal.Rdata")
+```
+
+```{r}
+#### load long run from sedna
+load("model.Adyo_WT_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_WT_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_WT_mal$VCV)
+summary(model.Adyo_WT_mal)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.WT_mal_wild <- model.Adyo_WT_mal$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_WT_mal$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_WT_mal$VCV[, "Origin_ped.offWild.units"] + model.Adyo_WT_mal$VCV[, "dam"] + model.Adyo_WT_mal$VCV[, "Year.off"])
+plot(posterior.heritability.WT_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.WT_mal_wild)
+HPDinterval(posterior.heritability.WT_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.WT_mal_hat <- model.Adyo_WT_mal$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_WT_mal$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_WT_mal$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_WT_mal$VCV[, "dam"] + model.Adyo_WT_mal$VCV[, "Year.off"])
+plot(posterior.heritability.WT_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.WT_mal_hat)
+HPDinterval(posterior.heritability.WT_mal_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_WT_mal$VCV)
+```
+
+## Females only - year as random effect, origin as random effect - weight
+
+```{r eval = FALSE}
+##### set up and run weight model - 
+##### female only
+
+dmal = subset(dfil,Sex_Final.off=="Female")
+pvar = var(dmal$Weight.off,na.rm=T)
+pvar
+summary(dmal$Weight.off)
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# Weight model, age fixed effects and origin and year as random effects
+model.Adyo_WT_fem <- MCMCglmm(Weight.off ~ as.factor(Age.off) ,
+                              random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                              family = "gaussian",
+                              pedigree = pedf, data = dmal,
+                              nitt = 500000, burnin = 10000, thin = 500,
+                              prior = priorR2, verbose = TRUE)
+save(model.Adyo_WT_fem,file="model.Adyo_WT_fem.Rdata")
+```
+
+```{r}
+load("model.Adyo_WT_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_WT_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_WT_fem$VCV)
+summary(model.Adyo_WT_fem)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.WT_fem_wild <- model.Adyo_WT_fem$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_WT_fem$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_WT_fem$VCV[, "Origin_ped.offWild.units"] + model.Adyo_WT_fem$VCV[, "dam"] + model.Adyo_WT_fem$VCV[, "Year.off"])
+plot(posterior.heritability.WT_fem_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.WT_fem_wild)
+HPDinterval(posterior.heritability.WT_fem_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.WT_fem_hat <- model.Adyo_WT_fem$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_WT_fem$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_WT_fem$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_WT_fem$VCV[, "dam"] + model.Adyo_WT_fem$VCV[, "Year.off"])
+plot(posterior.heritability.WT_fem_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+median(posterior.heritability.WT_fem_hat)
+HPDinterval(posterior.heritability.WT_fem_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_WT_fem$VCV)
+```
+
+## 
+
+## Summary table
+
+```{r echo = F}
+st = data.frame(trait = character(12),sex = character(12),origin=character(12),h2=numeric(12),lowerci = numeric(12),upperci = numeric(12))
+st$trait = c("FKL","FKL","FKL","FKL","WT","WT","WT","WT","RT","RT","RT","RT")
+st$sex = c("male","male","female","female","male","male","female","female","male","male","female","female")
+st$origin = c("wild","hatchery","wild","hatchery","wild","hatchery","wild","hatchery","wild","hatchery","wild","hatchery")
+st$h2[1] = mean(posterior.heritability.fkl_mal_wild)
+st$lowerci[1] = HPDinterval(posterior.heritability.fkl_mal_wild,.95)[1]
+st$upperci[1] = HPDinterval(posterior.heritability.fkl_mal_wild)[2]
+
+st$h2[2] = mean(posterior.heritability.fkl_mal_hat)
+st$lowerci[2] = HPDinterval(posterior.heritability.fkl_mal_hat,.95)[1]
+st$upperci[2] = HPDinterval(posterior.heritability.fkl_mal_hat)[2]
+
+st$h2[3] = mean(posterior.heritability.fkl_fem_wild)
+st$lowerci[3] = HPDinterval(posterior.heritability.fkl_fem_wild,.95)[1]
+st$upperci[3] = HPDinterval(posterior.heritability.fkl_fem_wild)[2]
+
+st$h2[4] = mean(posterior.heritability.fkl_fem_hat)
+st$lowerci[4] = HPDinterval(posterior.heritability.fkl_fem_hat,.95)[1]
+st$upperci[4] = HPDinterval(posterior.heritability.fkl_fem_hat)[2]
+
+st$h2[5] = mean(posterior.heritability.WT_mal_wild)
+st$lowerci[5] = HPDinterval(posterior.heritability.WT_mal_wild,.95)[1]
+st$upperci[5] = HPDinterval(posterior.heritability.WT_mal_wild)[2]
+
+st$h2[6] = mean(posterior.heritability.WT_mal_hat)
+st$lowerci[6] = HPDinterval(posterior.heritability.WT_mal_hat,.95)[1]
+st$upperci[6] = HPDinterval(posterior.heritability.WT_mal_hat)[2]
+
+st$h2[7] = mean(posterior.heritability.WT_fem_wild)
+st$lowerci[7] = HPDinterval(posterior.heritability.WT_fem_wild,.95)[1]
+st$upperci[7] = HPDinterval(posterior.heritability.WT_fem_wild)[2]
+
+st$h2[8] = mean(posterior.heritability.WT_fem_hat)
+st$lowerci[8] = HPDinterval(posterior.heritability.WT_fem_hat,.95)[1]
+st$upperci[8] = HPDinterval(posterior.heritability.WT_fem_hat)[2]
+
+st$h2[9] = mean(posterior.heritability.RT_mal_wild)
+st$lowerci[9] = HPDinterval(posterior.heritability.RT_mal_wild,.95)[1]
+st$upperci[9] = HPDinterval(posterior.heritability.RT_mal_wild)[2]
+
+st$h2[10] = mean(posterior.heritability.RT_mal_hat)
+st$lowerci[10] = HPDinterval(posterior.heritability.RT_mal_hat,.95)[1]
+st$upperci[10] = HPDinterval(posterior.heritability.RT_mal_hat)[2]
+
+st$h2[11] = mean(posterior.heritability.RT_fem_wild)
+st$lowerci[11] = HPDinterval(posterior.heritability.RT_fem_wild,.95)[1]
+st$upperci[11] = HPDinterval(posterior.heritability.RT_fem_wild)[2]
+
+st$h2[12] = mean(posterior.heritability.RT_fem_hat)
+st$lowerci[12] = HPDinterval(posterior.heritability.RT_fem_hat,.95)[1]
+st$upperci[12] = HPDinterval(posterior.heritability.RT_fem_hat)[2]
+st
+```
+
+plot h2 results
+
+```{r}
+plot = ggplot(data=st,aes(x=origin,y=h2,color=sex,pch=sex,ymin=lowerci,ymax=upperci)) + geom_point() + geom_errorbar(width=.2) + scale_color_manual(values=c("darkseagreen","steelblue"))+ facet_wrap(~trait) + theme_cowplot()
+plot
+```

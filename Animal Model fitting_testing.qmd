@@ -1,0 +1,1007 @@
+---
+title: "Wenatchee animal model"
+embed-resources: true
+format: html
+editor: visual
+---
+
+## Load and format pedigree and data
+
+```{r}
+library(MCMCglmm)
+library(ggplot2)
+library(sequoia)
+library(pedtricks)
+setwd("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Git-Wenatchee-RRS")
+
+d = read.csv("pedigree_fitness_Tumwater_Grun_4.29.25.csv",stringsAsFactors = F,na.strings = "NA")
+d$id = as.factor(d$id)
+d$dam = as.factor(d$dam)
+d$sire = as.factor(d$sire)
+d = d[,c(3,1,2,4:ncol(d))]
+names(d)[1] = "animal"
+```
+
+## Filter pedigree down to the data of interest
+
+```{r}
+ped = d
+ped = subset(ped,Origin_ped.off == "Hatchery" | Origin_ped.off == "Wild")
+ped = subset(ped,!is.na(Origin_ped.off))
+ped = subset(ped,!is.na(Origin_ped.dam))
+ped = subset(ped,!is.na(Origin_ped.sire))
+ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+ped = subset(ped,GRun.off == "Spring" )
+ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+ped = subset(ped,Year.off <=2018 & Year.off >= 2008) # after this hatchery fish were not sampled
+
+#ped = subset(ped,Year.off <=2012 & Year.off >= 2008) # or make a smaller pedigree for testing purposes
+
+# limit to neither parent NA
+ped = subset(ped, !is.na(sire) & !is.na(dam)) ### try not doing this
+
+```
+
+Sample size per year
+
+```{r}
+table(ped$Sex_Field.off,ped$Year.off)
+```
+
+Total pedigree size
+
+```{r}
+nrow(ped)
+```
+
+## Format and complete pedigree
+
+```{r}
+pedf = fix_ped(ped)
+#dfil = subset(d,animal %in% pedf$id)
+dfil = ped
+
+table(dfil$Origin_ped.off,dfil$Year.off)
+```
+
+## Fit animal models
+
+First, try fitting a very simple model on the small data set to see if it works. Will try to estimate the h2 of length. If model already exits, just load.
+
+```{r}
+
+##### set up and run fkl model - 
+##### model1 - simple model ignoring sex and origin
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal + dam,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfil,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AdY_test,file="model1_AdY_test.Rdata")
+
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl <- model.AdY_test$VCV[, "animal"] /
+  (model.AdY_test$VCV[, "animal"] + model.AdY_test$VCV[, "units"]+model.AdY_test$VCV[, "dam"] )
+plot(posterior.heritability.fkl)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl)
+HPDinterval(posterior.heritability.fkl, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test$VCV)
+```
+
+## See how it works on filtered data - females only
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dfem = subset(dfil,Sex_Final.off=="Female")
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test_fem <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal + dam,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfem,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AdY_test_fem,file="model1_AdY_test_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_fem$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_fem <- model.AdY_test_fem$VCV[, "animal"] /
+  (model.AdY_test_fem$VCV[, "animal"] + model.AdY_test_fem$VCV[, "units"] + model.AdY_test_fem$VCV[, "dam"])
+plot(posterior.heritability.fkl_fem)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_fem)
+HPDinterval(posterior.heritability.fkl_fem, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_fem$VCV)
+```
+
+## Males only
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test_mal <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal + dam,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AdY_test_mal,file="model1_AdY_test_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_mal$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_mal <- model.AdY_test_mal$VCV[, "animal"] /
+  (model.AdY_test_mal$VCV[, "animal"] + model.AdY_test_mal$VCV[, "units"] + model.AdY_test_mal$VCV[, "dam"])
+plot(posterior.heritability.fkl_mal)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_mal)
+HPDinterval(posterior.heritability.fkl_mal, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_mal$VCV)
+```
+
+## Wild Males only
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dmalw = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off=="Wild")
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test_malw <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal + dam,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmalw,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AdY_test_malw,file="model1_AdY_test_malw.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malw$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malw$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_malw <- model.AdY_test_malw$VCV[, "animal"] /
+  (model.AdY_test_malw$VCV[, "animal"] + model.AdY_test_malw$VCV[, "units"] + model.AdY_test_malw$VCV[, "dam"])
+plot(posterior.heritability.fkl_malw)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_malw)
+HPDinterval(posterior.heritability.fkl_malw, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_malw$VCV)
+```
+
+## Hatchery Males only
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dmalh = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off=="Hatchery")
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test_malh <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal + dam,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmalh,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AdY_test_malh,file="model1_AdY_test_malh.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malh$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malh$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_malh <- model.AdY_test_malh$VCV[, "animal"] /
+  (model.AdY_test_malh$VCV[, "animal"] + model.AdY_test_malh$VCV[, "units"] + model.AdY_test_malh$VCV[, "dam"] )
+plot(posterior.heritability.fkl_malh)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_malh)
+HPDinterval(posterior.heritability.fkl_malh, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_malh$VCV)
+```
+
+## Try one without a dam effect
+
+```{r}
+dmalw = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off=="Wild")
+
+priorR1 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AdY_test_malwnd <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ animal,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmalw,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR1, verbose = TRUE)
+save(model.AdY_test_malwnd,file="model1_AdY_test_malwnd.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malwnd$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AdY_test_malwnd$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_malwnd <- model.AdY_test_malwnd$VCV[, "animal"] /
+  (model.AdY_test_malwnd$VCV[, "animal"] + model.AdY_test_malwnd$VCV[, "units"]  )
+plot(posterior.heritability.fkl_malwnd)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_malwnd$VCV)
+```
+
+## Sex as a random effect
+
+```{r}
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2), nu = 1.002), G3 = list(V = 1, nu = 0.002)),
+  R = list(R1 = list(V = diag(2), nu = 1.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.AsdY_test <- MCMCglmm(Fork.off ~ as.factor(Age.off) + as.factor(Year.off) ,
+                        random = ~ idh(Sex_Final.off):animal + dam,
+                        rcov = ~ idh(Sex_Final.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfil,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.AsdY_test,file="model.AsdY_test.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AsdY_test$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.AsdY_test$VCV)
+```
+
+Plot of h2 - males
+
+```{r}
+summary(model.AsdY_test$VCV)
+posterior.heritability.fkl_mal <- model.AsdY_test$VCV[, "Sex_Final.offMale.animal"] /
+  (model.AsdY_test$VCV[, "Sex_Final.offMale.animal"] + model.AsdY_test$VCV[, "Sex_Final.offMale.units"] + model.AsdY_test$VCV[, "dam"] )
+plot(posterior.heritability.fkl_mal)
+```
+
+Plot of h2 - females
+
+```{r}
+
+posterior.heritability.fkl_femal <- model.AsdY_test$VCV[, "Sex_Final.offFemale.animal"] /
+  (model.AsdY_test$VCV[, "Sex_Final.offFemale.animal"] + model.AsdY_test$VCV[, "Sex_Final.offFemale.units"] + model.AsdY_test$VCV[, "dam"] )
+plot(posterior.heritability.fkl_femal)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.AdY_test_malwnd$VCV)
+```
+
+## Try year as a random effect
+
+no sex, no origin model
+
+```{r}
+
+##### set up and run fkl model - 
+##### model1 - simple model ignoring sex and origin
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), G2 = list(V=1,nu=.002), G3 = list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.Ady_test <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ animal + dam + Year.off,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfil,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Ady_test,file="model1_Ady_test.Rdata")
+
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl <- model.Ady_test$VCV[, "animal"] /
+  (model.Ady_test$VCV[, "animal"] + model.Ady_test$VCV[, "units"]+model.Ady_test$VCV[, "dam"] + +model.Ady_test$VCV[, "Year.off"] )
+plot(posterior.heritability.fkl)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl)
+HPDinterval(posterior.heritability.fkl, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Ady_test$VCV)
+```
+
+## Females only, year as random effect
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dfem = subset(dfil,Sex_Final.off=="Female")
+
+priorR2 <- list(
+  G = list(G1 = list(V = 1, nu = 0.002), G2 = list(V=1,nu=.002),G3 = list(V=1,nu=.002)),
+  R = list(R2 = list(V = 1, nu = 0.002))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.Ady_test_fem <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ animal + dam + Year.off,
+                        family = "gaussian",
+                        pedigree = pedf, data = dfem,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Ady_test_fem,file="model1_Ady_test_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test_fem$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_fem <- model.Ady_test_fem$VCV[, "animal"] /
+  (model.Ady_test_fem$VCV[, "animal"] + model.Ady_test_fem$VCV[, "units"] + model.Ady_test_fem$VCV[, "dam"] + model.Ady_test_fem$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_fem)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_fem)
+HPDinterval(posterior.heritability.fkl_fem, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Ady_test_fem$VCV)
+```
+
+## Males only - year as random effect
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+pvar = var(dmal$Fork.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = pvar*.25, nu = 0.2), G2 = list(V=pvar*.25,nu=.2), G3 = list(V=1,nu=.2)),
+  R = list(R2 = list(V = pvar*.5, nu = 0.2))
+)
+
+# fork length model, age and year fixed effects and sex and origin as random effects
+model.Ady_test_mal <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ animal + dam + Year.off,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Ady_test_mal,file="model1_Ady_test_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(1,1,1,1))
+plot(model.Ady_test_mal$VCV)
+summary(model.Ady_test_mal$VCV)
+```
+
+Plot of h2
+
+```{r}
+posterior.heritability.fkl_mal <- model.Ady_test_mal$VCV[, "animal"] /
+  (model.Ady_test_mal$VCV[, "animal"] + model.Ady_test_mal$VCV[, "units"] + model.Ady_test_mal$VCV[, "dam"] + model.Ady_test_mal$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_mal)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_mal)
+HPDinterval(posterior.heritability.fkl_mal, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Ady_test_mal$VCV)
+```
+
+## Males only - year as random effect, origin as random effect - fork length
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+pvar = var(dmal$Fork.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_test_mal <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Adyo_test_mal,file="model1_Adyo_test_mal.Rdata")
+```
+
+```{r}
+#### load long run from sedna
+load("model.Adyo_mal.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_mal$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_mal$VCV)
+summary(model.Adyo_mal$VCV)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.fkl_mal_wild <- model.Adyo_mal$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_mal$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_mal$VCV[, "Origin_ped.offWild.units"] + model.Adyo_mal$VCV[, "dam"] + model.Adyo_mal$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_mal_wild)
+HPDinterval(posterior.heritability.fkl_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.fkl_mal_hat <- model.Adyo_mal$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_mal$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_mal$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_mal$VCV[, "dam"] + model.Adyo_mal$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_mal_hat)
+HPDinterval(posterior.heritability.fkl_mal_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_mal$VCV)
+```
+
+## Females only - year as random effect, origin as random effect - fork length
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - female only
+
+dmal = subset(dfil,Sex_Final.off=="Female")
+pvar = var(dmal$Fork.off,na.rm=T)
+
+priorR2 <- list(
+  G = list(G1 = list(V = diag(2)*pvar*.25, nu = .2), G2 = list(V = pvar*.25, nu = 0.2), G3 = list(V=pvar*.25,nu=.2)),
+  R = list(R2 = list(V = diag(2)*pvar*.5, nu = .2))
+)
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_test_fem <- MCMCglmm(Fork.off ~ as.factor(Age.off) ,
+                        random = ~ idh(Origin_ped.off):animal + dam + Year.off ,rcov = ~idh(Origin_ped.off):units,
+                        family = "gaussian",
+                        pedigree = pedf, data = dmal,
+                        nitt = 50000, burnin = 1000, thin = 500,
+                        prior = priorR2, verbose = TRUE)
+save(model.Adyo_test_fem,file="model1_Adyo_test_fem.Rdata")
+```
+
+```{r}
+load("model.Adyo_fem.Rdata")
+```
+
+Plots of fixed effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_fem$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Adyo_fem$VCV)
+summary(model.Adyo_fem$VCV)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.fkl_fem_wild <- model.Adyo_fem$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_fem$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_fem$VCV[, "Origin_ped.offWild.units"] + model.Adyo_fem$VCV[, "dam"] + model.Adyo_fem$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_fem_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_fem_wild)
+HPDinterval(posterior.heritability.fkl_fem_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.fkl_fem_hat <- model.Adyo_fem$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_fem$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_fem$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_fem$VCV[, "dam"] + model.Adyo_fem$VCV[, "Year.off"])
+plot(posterior.heritability.fkl_fem_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.fkl_fem_hat)
+HPDinterval(posterior.heritability.fkl_fem_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_fem$VCV)
+```
+
+## Males only - year as random effect, origin as random effect - age
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+dmal$Age.off2 = NA
+dmal$Age.off2 = ifelse(dmal$Age.off>=4,0,dmal$Age.off2)
+dmal$Age.off2 = ifelse(dmal$Age.off==3,1,dmal$Age.off2)
+table(dmal$Age.off2,useNA = 'ifany')
+
+
+priorB3 <- list(R = list(V = 1, fix = 1),
+               G = list(G1 = list(V = diag(2), nu = 1000, alpha.mu = c(0,0), alpha.V = diag(2)), G2 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1),G3 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1)))
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_age_mal_th <- MCMCglmm(Age.off2 ~ 1,
+                        random = ~ idh(Origin_ped.off):animal + dam + Year.off ,
+                        family = "threshold",
+                        pedigree = pedf, data = dmal,
+                        nitt = 500000, burnin = 15000, thin = 500,
+                        prior = priorB3, verbose = TRUE)
+save(model.Adyo_age_mal_th,file="model.Adyo_age_mal_th.Rdata")
+```
+
+```{r}
+#### load long run from sedna
+load("model.Adyo_age_mal_th.Rdata")
+summary(model.Adyo_age_mal_th)
+```
+
+Plots of fixed effects
+
+```{r}
+#par(mar=c(1,1,1,1))
+plot(model.Adyo_age_mal_th$Sol)
+summary(model.Adyo_age_mal_th$Sol)
+```
+
+Plots of random effects
+
+```{r}
+par(mar=c(3,3,3,2))
+plot(model.Adyo_age_mal_th$VCV)
+summary(model.Adyo_age_mal_th$VCV)
+summary(model.Adyo_age_mal_th)
+```
+
+```{r}
+posterior.heritability.age_mal_wild <- model.Adyo_age_mal_th$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_age_mal_th$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_age_mal_th$VCV[, "Origin_ped.offWild.units"] + model.Adyo_age_mal_th$VCV[, "dam"] + model.Adyo_age_mal_th$VCV[, "Year.off"])
+plot(posterior.heritability.age_mal_wild)
+  
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.age_mal_wild <- model.Adyo_age_mal_th$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Adyo_age_mal_th$VCV[, "Origin_ped.offWild.animal"] + model.Adyo_age_mal_th$VCV[, "units"] + model.Adyo_age_mal_th$VCV[, "dam"] + model.Adyo_age_mal_th$VCV[, "Year.off"])
+plot(posterior.heritability.age_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.age_mal_wild)
+HPDinterval(posterior.heritability.age_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.age_mal_hat <- model.Adyo_age_mal_th$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Adyo_age_mal_th$VCV[, "Origin_ped.offHatchery.animal"] + model.Adyo_age_mal_th$VCV[, "Origin_ped.offHatchery.units"] + model.Adyo_age_mal_th$VCV[, "dam"] + model.Adyo_age_mal_th$VCV[, "Year.off"])
+plot(posterior.heritability.age_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.age_mal_hat)
+HPDinterval(posterior.heritability.age_mal_hat, 0.95)
+```
+
+Autocorrelation stats
+
+```{r}
+autocorr.diag(model.Adyo_age_mal_cat$VCV)
+```
+
+Wild only model
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - wild male only
+
+dmal = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off == "Wild")
+dmal$Age.off2 = NA
+dmal$Age.off2 = ifelse(dmal$Age.off>=4,0,dmal$Age.off2)
+dmal$Age.off2 = ifelse(dmal$Age.off==3,1,dmal$Age.off2)
+table(dmal$Age.off2,useNA = 'ifany')
+table(dmal$Age.off,dmal$Age.sire)
+table(dmal$Origin_ped.off,dmal$Origin_ped.sire)
+
+
+priorB3 <- list(R = list(V = 1, fix = 1),
+               G = list(G1 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1), G2 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1),G3 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1)))
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_age_mal_th_wild <- MCMCglmm(Age.off2 ~ 1,
+                        random = ~ animal + dam + Year.off ,
+                        family = "threshold",
+                        pedigree = pedf, data = dmal,
+                        nitt = 500000, burnin = 15000, thin = 500,
+                        prior = priorB3, verbose = TRUE)
+save(model.Adyo_age_mal_th_wild,file="model.Adyo_age_mal_th_wild.Rdata")
+```
+
+```{r}
+plot(model.Adyo_age_mal_th_wild$Sol)
+summary(model.Adyo_age_mal_th_wild)
+```
+
+```{r}
+par(mar=c(3,3,3,2))
+plot(model.Adyo_age_mal_th_wild$VCV)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.age_mal_wild <- model.Adyo_age_mal_th_wild$VCV[, "animal"] /
+  (model.Adyo_age_mal_th_wild$VCV[, "animal"] + model.Adyo_age_mal_th_wild$VCV[, "units"] + model.Adyo_age_mal_th_wild$VCV[, "dam"] + model.Adyo_age_mal_th_wild$VCV[, "Year.off"])
+plot(posterior.heritability.age_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.age_mal_wild)
+HPDinterval(posterior.heritability.age_mal_wild, 0.95)
+```
+
+Hatchery only model
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - wild male only
+
+dmal = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off == "Hatchery")
+dmal$Age.off2 = NA
+dmal$Age.off2 = ifelse(dmal$Age.off>=4,0,dmal$Age.off2)
+dmal$Age.off2 = ifelse(dmal$Age.off==3,1,dmal$Age.off2)
+table(dmal$Age.off2,useNA = 'ifany')
+table(dmal$Age.off,dmal$Age.sire)
+table(dmal$Origin_ped.off,dmal$Origin_ped.sire)
+
+
+priorB3 <- list(R = list(V = 1, fix = 1),
+               G = list(G1 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1), G2 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1),G3 = list(V = 1, nu = 1000, alpha.mu = 0, alpha.V = 1)))
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Adyo_age_mal_th_hat <- MCMCglmm(Age.off2 ~ 1,
+                        random = ~ animal + dam + Year.off ,
+                        family = "threshold",
+                        pedigree = pedf, data = dmal,
+                        nitt = 500000, burnin = 15000, thin = 500,
+                        prior = priorB3, verbose = TRUE)
+save(model.Adyo_age_mal_th_hat,file="model.Adyo_age_mal_th_hat.Rdata")
+```
+
+```{r}
+plot(model.Adyo_age_mal_th_hat$Sol)
+summary(model.Adyo_age_mal_th_hat)
+```
+
+```{r}
+par(mar=c(3,3,3,2))
+plot(model.Adyo_age_mal_th_hat$VCV)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.age_mal_hat <- model.Adyo_age_mal_th_hat$VCV[, "animal"] /
+  (model.Adyo_age_mal_th_hat$VCV[, "animal"] + model.Adyo_age_mal_th_hat$VCV[, "units"] + model.Adyo_age_mal_th_hat$VCV[, "dam"] + model.Adyo_age_mal_th_hat$VCV[, "Year.off"])
+plot(posterior.heritability.age_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+posterior.mode(posterior.heritability.age_mal_hat)
+HPDinterval(posterior.heritability.age_mal_hat, 0.95)
+```
+
+## Fitness effects
+
+## Plot offspring length and parent length, males
+
+```{r}
+
+lenplot = ggplot(data=subset(dfil,Sex_Final.off=="Male"),aes(x=Fork.sire,y=Fork.off)) + geom_point() + facet_wrap(~Age.off+Age.sire)
+lenplot
+```
