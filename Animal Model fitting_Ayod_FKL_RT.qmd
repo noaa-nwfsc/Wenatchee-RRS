@@ -28,9 +28,27 @@ temp = paste("1/1/",d$Year.off,sep="")
 temp = as.Date(temp,format="%m/%d/%Y")
 dayofyear = d$Date.off - temp
 d$Dayofyear.off = dayofyear
-d$Dayofyear = as.integer(d$Dayofyear)
+d$Dayofyear.off = as.integer(d$Dayofyear.off)
 mean(d$Dayofyear.off,na.rm=T)
 sd(d$Dayofyear.off,na.rm=T)
+
+d$Date.sire = as.Date(d$Date.sire,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.sire,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.sire - temp
+d$Dayofyear.sire = dayofyear
+d$Dayofyear.sire = as.integer(d$Dayofyear.sire)
+mean(d$Dayofyear.sire,na.rm=T)
+sd(d$Dayofyear.sire,na.rm=T)
+
+d$Date.dam = as.Date(d$Date.dam,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.dam,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.dam - temp
+d$Dayofyear.dam = dayofyear
+d$Dayofyear.dam = as.integer(d$Dayofyear.dam)
+mean(d$Dayofyear.dam,na.rm=T)
+sd(d$Dayofyear.dam,na.rm=T)
 ```
 
 ## Filter pedigree down to the data of interest
@@ -157,6 +175,26 @@ Autocorrelation stats
 autocorr.diag(model.Adyo_mal$VCV)
 ```
 
+Parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Male")
+por_males_flk = lm(Fork.off~Fork.sire*Origin_ped.off +as.factor(Age.off),data=dr)
+summary(por_males_flk)
+
+testplot_byage = ggplot(data=dr,aes(x=Fork.sire,y=Fork.off,color=as.factor(Age.off),group=Age.off)) + geom_point() + geom_smooth(method=lm) 
+testplot_byage
+
+testplot_byage_origin = ggplot(data=dr,aes(x=Fork.sire,y=Fork.off,color=as.factor(Age.off),pch=as.factor(Origin_ped.off))) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+testplot_byage_origin
+
+testplot_noage = ggplot(data=dr,aes(x=Fork.sire,y=Fork.off)) + geom_point() + geom_smooth(method=lm) 
+testplot_noage
+
+testm = lm(Fork.off~Fork.sire ,data = subset(dr))
+summary(testm)
+```
+
 ## Females only - year as random effect, origin as random effect - fork length
 
 ```{r eval = FALSE}
@@ -234,6 +272,14 @@ Autocorrelation stats
 
 ```{r}
 autocorr.diag(model.Adyo_fem$VCV)
+```
+
+Parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Female")
+por_females_flk = lm(Fork.off~Fork.dam*Origin_ped.off + as.factor(Age.off) ,data=dr)
+summary(por_females_flk)
 ```
 
 ## Males only - year as random effect, origin as random effect - run timing
@@ -316,6 +362,12 @@ Autocorrelation stats
 autocorr.diag(model.Adyo_RT_mal$VCV)
 ```
 
+```{r}
+dr = subset(dfil,Sex_Final.off=="Male")
+por_males_rt = lm(Dayofyear.off~Dayofyear.sire*Origin_ped.off + as.factor(Age.off) ,data=dr)
+summary(por_males_rt)
+```
+
 ## Females only - year as random effect, origin as random effect - run timing
 
 ```{r eval = FALSE}
@@ -390,6 +442,14 @@ Autocorrelation stats
 
 ```{r}
 autocorr.diag(model.Adyo_RT_fem$VCV)
+```
+
+Parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Female")
+por_females_rt = lm(Dayofyear.off~Dayofyear.dam*Origin_ped.off + as.factor(Age.off) ,data=dr)
+summary(por_females_rt)
 ```
 
 ## Males only - year as random effect, origin as random effect - weight
@@ -472,6 +532,14 @@ Autocorrelation stats
 autocorr.diag(model.Adyo_WT_mal$VCV)
 ```
 
+Parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Male")
+por_males_wt = lm(Weight.off~Weight.sire*Origin_ped.off + as.factor(Age.off) ,data=dr)
+summary(por_males_wt)
+```
+
 ## Females only - year as random effect, origin as random effect - weight
 
 ```{r eval = FALSE}
@@ -552,7 +620,71 @@ Autocorrelation stats
 autocorr.diag(model.Adyo_WT_fem$VCV)
 ```
 
-## 
+Parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Female")
+por_females_wt = lm(Weight.off~Weight.dam*Origin_ped.off + as.factor(Age.off) ,data=dr)
+summary(por_females_wt)
+```
+
+## Male age - parent offspring regression
+
+```{r}
+dr = subset(dfil,Sex_Final.off=="Male")
+dr$Age.off2 = NA
+dr$Age.off2 = ifelse(dr$Age.off>=4,0,dr$Age.off2)
+dr$Age.off2 = ifelse(dr$Age.off==3,1,dr$Age.off2)
+
+dr$Age.sire2 = NA
+dr$Age.sire2 = ifelse(dr$Age.sire>=4,0,dr$Age.sire2)
+dr$Age.sire2 = ifelse(dr$Age.sire==3,1,dr$Age.sire2)
+
+table(dr$Age.off2,dr$Age.sire2)
+
+por_males_age = glm(Age.off2~Age.sire2*Origin_ped.off ,data=dr,family = binomial )
+summary(por_males_age)
+normal_space_coefs = exp(coefficients(por_males_age))/(1 + exp(coefficients(por_males_age)))
+normal_space_coefs
+
+### wild only
+
+dr = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off == "Wild")
+dr$Age.off2 = NA
+dr$Age.off2 = ifelse(dr$Age.off>=4,0,dr$Age.off2)
+dr$Age.off2 = ifelse(dr$Age.off==3,1,dr$Age.off2)
+
+dr$Age.sire2 = NA
+dr$Age.sire2 = ifelse(dr$Age.sire>=4,0,dr$Age.sire2)
+dr$Age.sire2 = ifelse(dr$Age.sire==3,1,dr$Age.sire2)
+
+table(dr$Age.off2,dr$Age.sire2)
+
+por_males_age_wild = glm(Age.off2~Age.sire2 ,data=dr,family = binomial )
+summary(por_males_age_wild)
+normal_space_coefs_wild = exp(coefficients(por_males_age_wild))/(1 + exp(coefficients(por_males_age_wild)))
+normal_space_coefs_wild
+
+### hatchery only
+
+dr = subset(dfil,Sex_Final.off=="Male" & Origin_ped.off == "Hatchery")
+dr$Age.off2 = NA
+dr$Age.off2 = ifelse(dr$Age.off>=4,0,dr$Age.off2)
+dr$Age.off2 = ifelse(dr$Age.off==3,1,dr$Age.off2)
+
+dr$Age.sire2 = NA
+dr$Age.sire2 = ifelse(dr$Age.sire>=4,0,dr$Age.sire2)
+dr$Age.sire2 = ifelse(dr$Age.sire==3,1,dr$Age.sire2)
+
+table(dr$Age.off2,dr$Age.sire2)
+
+por_males_age_hatchery = glm(Age.off2~Age.sire2 ,data=dr,family = binomial )
+summary(por_males_age_hatchery)
+normal_space_coefs_hatchery = exp(coefficients(por_males_age_hatchery))/(1 + exp(coefficients(por_males_age_hatchery)))
+normal_space_coefs_hatchery
+
+
+```
 
 ## Summary table
 

@@ -890,6 +890,70 @@ Autocorrelation stats
 autocorr.diag(model.Adyo_age_mal_cat$VCV)
 ```
 
+## Male with origin as random effect but no dam or year
+
+```{r}
+##### set up and run fkl model - 
+##### model2 - male only
+
+dmal = subset(dfil,Sex_Final.off=="Male")
+dmal$Age.off2 = NA
+dmal$Age.off2 = ifelse(dmal$Age.off>=4,0,dmal$Age.off2)
+dmal$Age.off2 = ifelse(dmal$Age.off==3,1,dmal$Age.off2)
+
+
+
+priorB3 <- list(R = list(V = diag(2), fix = 1),
+               G = list(G1 = list(V = diag(2), nu = 1000, alpha.mu = c(0,0), alpha.V = diag(2))))
+
+
+# fork length model, age fixed effects and origin and year as random effects
+model.Ao_age_mal <- MCMCglmm(Age.off2 ~ 1,
+                        random = ~ idh(Origin_ped.off):animal ,rcov = ~idh(Origin_ped.off):units,
+                        family = "threshold",
+                        pedigree = pedf, data = dmal,
+                        nitt = 500000, burnin = 10000, thin = 500,
+                        prior = priorB3, verbose = TRUE)
+save(model.Ao_age_mal,file="model.Ao_age_mal.Rdata")
+```
+
+```{r}
+par(mar=c(3,3,3,3))
+plot(model.Ao_age_mal$Sol)
+plot(model.Ao_age_mal$VCV)
+summary(model.Ao_age_mal)
+```
+
+Plot of h2-wild
+
+```{r}
+posterior.heritability.age_mal_wild <- model.Ao_age_mal$VCV[, "Origin_ped.offWild.animal"] /
+  (model.Ao_age_mal$VCV[, "Origin_ped.offWild.animal"] + model.Ao_age_mal$VCV[, "Origin_ped.offWild.units"] )
+plot(posterior.heritability.age_mal_wild)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+mean(posterior.heritability.age_mal_wild)
+HPDinterval(posterior.heritability.age_mal_wild, 0.95)
+```
+
+Plot of h2-hatchery
+
+```{r}
+posterior.heritability.age_mal_hat <- model.Ao_age_mal$VCV[, "Origin_ped.offHatchery.animal"] /
+  (model.Ao_age_mal$VCV[, "Origin_ped.offHatchery.animal"] + model.Ao_age_mal$VCV[, "Origin_ped.offHatchery.units"] )
+plot(posterior.heritability.age_mal_hat)
+```
+
+H2 estimate and 95% CI
+
+```{r}
+mean(posterior.heritability.age_mal_hat)
+HPDinterval(posterior.heritability.age_mal_hat, 0.95)
+```
+
 Wild only model
 
 ```{r}
@@ -996,7 +1060,9 @@ posterior.mode(posterior.heritability.age_mal_hat)
 HPDinterval(posterior.heritability.age_mal_hat, 0.95)
 ```
 
-## Fitness effects
+## 
+
+## 
 
 ## Plot offspring length and parent length, males
 

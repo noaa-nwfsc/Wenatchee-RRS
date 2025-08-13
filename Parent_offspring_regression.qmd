@@ -1,0 +1,306 @@
+---
+title: "Wenatchee parent offspring regression"
+embed-resources: true
+format: html
+editor: visual
+---
+
+## Load and format pedigree and data
+
+```{r}
+library(MCMCglmm)
+library(ggplot2)
+library(sequoia)
+library(pedtricks)
+library(cowplot)
+setwd("/Users/mike.ford/Documents/MikeFord/WenSpChkProp/FRANZWensp_analysis/Git-Wenatchee-RRS")
+
+d = read.csv("pedigree_fitness_Tumwater_Grun_4.29.25.csv",stringsAsFactors = F,na.strings = "NA")
+d$id = as.factor(d$id)
+d$dam = as.factor(d$dam)
+d$sire = as.factor(d$sire)
+d = d[,c(3,1,2,4:ncol(d))]
+names(d)[1] = "animal"
+
+#### format run timing
+d$Date.off = as.Date(d$Date.off,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.off,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.off - temp
+d$Dayofyear.off = dayofyear
+d$Dayofyear.off = as.integer(d$Dayofyear.off)
+mean(d$Dayofyear.off,na.rm=T)
+sd(d$Dayofyear.off,na.rm=T)
+
+d$Date.sire = as.Date(d$Date.sire,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.sire,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.sire - temp
+d$Dayofyear.sire = dayofyear
+d$Dayofyear.sire = as.integer(d$Dayofyear.sire)
+mean(d$Dayofyear.sire,na.rm=T)
+sd(d$Dayofyear.sire,na.rm=T)
+
+d$Date.dam = as.Date(d$Date.dam,format = '%m/%d/%y')
+temp = paste("1/1/",d$Year.dam,sep="")
+temp = as.Date(temp,format="%m/%d/%Y")
+dayofyear = d$Date.dam - temp
+d$Dayofyear.dam = dayofyear
+d$Dayofyear.dam = as.integer(d$Dayofyear.dam)
+mean(d$Dayofyear.dam,na.rm=T)
+sd(d$Dayofyear.dam,na.rm=T)
+```
+
+## Filter pedigree down to the data of interest
+
+```{r}
+ped = d
+ped = subset(ped,Origin_ped.off == "Hatchery" | Origin_ped.off == "Wild")
+ped = subset(ped,!is.na(Origin_ped.off))
+ped = subset(ped,!is.na(Origin_ped.dam))
+ped = subset(ped,!is.na(Origin_ped.sire))
+ped = subset(ped,Sex_Final.off == "Male" | Sex_Final.off == "Female")
+ped = subset(ped,GRun.off == "Spring" )
+ped = subset(ped,Final_Status_ped.off == "Broodstock" | Final_Status_ped.off == "Spawning Grounds")
+ped = subset(ped,Year.off <=2018 & Year.off >= 2008) # after this hatchery fish were not sampled
+
+#ped = subset(ped,Year.off <=2012 & Year.off >= 2008) # or make a smaller pedigree for testing purposes
+
+# limit to neither parent NA
+ped = subset(ped, !is.na(sire) & !is.na(dam)) ### 
+
+```
+
+Sample size per year
+
+```{r}
+table(ped$Sex_Field.off,ped$Year.off)
+```
+
+Total pedigree size
+
+```{r}
+nrow(ped)
+```
+
+## Parent offspring regression for various traits
+
+The goal of this exercise is a) to visualize the relationships between parent and offspring traits for various subsets of the data set, and b) provide a comparison to the heritability estimates from the animal models. One specific goal is to try to understand why some of the animal model heritability estimates are so high.
+
+## Fork length
+
+Parent offspring regression -- males, regression to mid-parent, including offspring age as a factor
+
+```{r}
+dr = ped
+dr$Fork.mid = (dr$Fork.dam+dr$Fork.sire)/2
+summary(dr$Fork.mid)
+rflk_males_age = lm(Fork.off~Fork.mid*Origin_ped.off +as.factor(Age.off),data=subset(dr,Sex_Final.off == "Male"))
+summary(rflk_males_age)
+
+rflk_male_age_plot = ggplot(data=subset(dr,Sex_Final.off == "Male"),aes(x=Fork.mid,y=Fork.off,color=as.factor(Age.off),group=Age.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_age_plot
+
+
+```
+
+Males, regression to sire, offspring age as factor
+
+```{r}
+dr = ped
+rflk_males_age_sire = lm(Fork.off~Fork.sire*Origin_ped.off +as.factor(Age.off),data=subset(dr,Sex_Final.off == "Male"))
+summary(rflk_males_age_sire)
+
+rflk_male_age_sire_plot = ggplot(data=subset(dr,Sex_Final.off == "Male"),aes(x=Fork.sire,y=Fork.off,color=as.factor(Age.off),group=Age.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_age_sire_plot
+```
+
+Males, regression to sire, offspring age AND sire age as factors (no origin)
+
+```{r}
+dr = ped
+dr$Agei = paste(dr$Age.sire,dr$Age.off,sep="_")
+table(dr$Agei)
+rflk_males_age2_sire = lm(Fork.off~Fork.sire+as.factor(Age.off)+as.factor(Age.sire),data=subset(dr,Sex_Final.off == "Male"))
+summary(rflk_males_age2_sire)
+
+rflk_male_age2_sire_plot = ggplot(data=subset(dr,Sex_Final.off == "Male"),aes(x=Fork.sire,y=Fork.off,color=as.factor(Agei),group=Agei)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_age2_sire_plot
+```
+
+Males, offspring and sire are age 4 (most common age)
+
+```{r}
+dr = ped
+
+rflk_males_4 = lm(Fork.off~Fork.sire*Origin_ped.off,data=subset(dr,Sex_Final.off == "Male" & Age.off==4 & Age.sire==4))
+summary(rflk_males_4)
+
+rflk_male_4_plot = ggplot(data=subset(dr,Sex_Final.off == "Male" & Age.off==4 & Age.sire==4),aes(x=Fork.sire,y=Fork.off,color=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_4_plot
+```
+
+Males, offspring and sire are both age 3
+
+```{r}
+dr = ped
+
+rflk_males_3 = lm(Fork.off~Fork.sire*Origin_ped.off,data=subset(dr,Sex_Final.off == "Male" & Age.off==3 & Age.sire==3))
+summary(rflk_males_3)
+
+rflk_male_3_plot = ggplot(data=subset(dr,Sex_Final.off == "Male" & Age.off==3 & Age.sire==3),aes(x=Fork.sire,y=Fork.off,color=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_3_plot
+```
+
+Males, offspring and sire are both age 5
+
+```{r}
+dr = ped
+
+rflk_males_5 = lm(Fork.off~Fork.sire*Origin_ped.off,data=subset(dr,Sex_Final.off == "Male" & Age.off==5 & Age.sire==5))
+summary(rflk_males_5)
+
+rflk_male_5_plot = ggplot(data=subset(dr,Sex_Final.off == "Male" & Age.off==5 & Age.sire==5),aes(x=Fork.sire,y=Fork.off,color=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_male_5_plot
+```
+
+Females, regresssion to mid-parent
+
+```{r}
+dr = ped
+dr$Fork.mid = (dr$Fork.dam+dr$Fork.sire)/2
+summary(dr$Fork.mid)
+rflk_females_age = lm(Fork.off~Fork.mid*Origin_ped.off +as.factor(Age.off),data=subset(dr,Sex_Final.off == "Female"))
+summary(rflk_females_age)
+
+rflk_female_age_plot = ggplot(data=subset(dr,Sex_Final.off == "Female"),aes(x=Fork.mid,y=Fork.off,color=as.factor(Age.off),group=Age.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_female_age_plot
+```
+
+Females, regression to dam
+
+```{r}
+dr = ped
+dr$Fork.mid = (dr$Fork.dam+dr$Fork.sire)/2
+summary(dr$Fork.mid)
+rflk_females_age_dam = lm(Fork.off~Fork.dam*Origin_ped.off +as.factor(Age.off),data=subset(dr,Sex_Final.off == "Female"))
+summary(rflk_females_age_dam)
+
+rflk_female_age_dam_plot = ggplot(data=subset(dr,Sex_Final.off == "Female"),aes(x=Fork.dam,y=Fork.off,color=as.factor(Age.off),group=Age.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rflk_female_age_dam_plot
+```
+
+## Run timing
+
+Males, mid-parent, including year as factor since it varies so among years
+
+```{r}
+dr = ped
+dr$Dayofyear.mid = (dr$Dayofyear.dam+dr$Dayofyear.sire)/2
+summary(dr$Dayofyear.mid)
+rRT_males = lm(Dayofyear.off~Dayofyear.mid*Origin_ped.off +as.factor(Year.off),data=subset(dr,Sex_Final.off == "Male"))
+summary(rRT_males)
+
+rRT_male_plot = ggplot(data=subset(dr,Sex_Final.off == "Male"),aes(x=Dayofyear.mid,y=Dayofyear.off,color=as.factor(Year.off),pch=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rRT_male_plot
+```
+
+Females
+
+```{r}
+dr = ped
+dr$Dayofyear.mid = (dr$Dayofyear.dam+dr$Dayofyear.sire)/2
+summary(dr$Dayofyear.mid)
+rRT_females = lm(Dayofyear.off~Dayofyear.mid*Origin_ped.off +as.factor(Year.off),data=subset(dr,Sex_Final.off == "Female"))
+summary(rRT_females)
+
+rRT_female_plot = ggplot(data=subset(dr,Sex_Final.off == "Female"),aes(x=Dayofyear.mid,y=Dayofyear.off,color=as.factor(Year.off),pch=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm) 
+rRT_female_plot
+```
+
+## Age
+
+Males. Will do this several ways. First, see determine if there is a relationship between offspring and sire age via contingency table analyses
+
+```{r}
+dr = ped
+maleagetable = table(dr$Age.off,dr$Age.sire)
+maleagetable
+mosaicplot(maleagetable,xlab="Offspring Age",ylab="Sire age")
+```
+
+```{r}
+maleagechisq = chisq.test(maleagetable,simulate.p.value = T)
+round(maleagechisq$observed - maleagechisq$expected,2)
+
+```
+
+Age appears to be heritable - a sire is more likely than expected to produce a male offspring of the same age (excluded age 2). Let's see if this differs between hatchery and wild
+
+```{r}
+dr = ped
+drwild = subset(dr,Origin_ped.off == "Wild")
+drhatchery = subset(dr,Origin_ped.off =="Hatchery")
+maleagetablewild = table(drwild$Age.off,drwild$Age.sire)
+maleagetablewild
+maleagetablehatchery = table(drhatchery$Age.off,drhatchery$Age.sire)
+maleagetablehatchery
+
+mosaicplot(maleagetablewild,xlab="Offspring Age",ylab="Sire age",main="Wild")
+mosaicplot(maleagetablehatchery,xlab="Offspring Age",ylab="Sire age",main="Hatchery")
+
+```
+
+```{r}
+maleagechisqwild = chisq.test(maleagetablewild,simulate.p.value = T)
+print("wild")
+round((maleagechisqwild$observed - maleagechisqwild$expected),2)
+
+maleagechisqhatchery = chisq.test(maleagetablehatchery,simulate.p.value = T)
+print("hatchery")
+round((maleagechisqhatchery$observed - maleagechisqhatchery$expected),2)
+
+
+```
+
+```{r}
+ageplotvio = ggplot(data = subset(ped,Sex_Final.off=="Male"),aes(x=Age.sire,y=as.factor(Age.off))) + geom_violin()
+ageplotvio
+```
+
+```{r}
+ageplotreg = ggplot(data = subset(ped,Sex_Final.off=="Male"),aes(x=Age.sire,y=Age.off)) + geom_jitter() + geom_smooth(method=lm)
+ageplotreg
+```
+
+```{r}
+
+```
+
+Try treating age as just a normal trait
+
+```{r}
+dr = ped
+rage_males = lm(Age.off~Age.sire*Origin_ped.off ,data=subset(dr,Sex_Final.off == "Male"))
+summary(rage_males)
+
+ageplotreg = ggplot(data = subset(ped,Sex_Final.off=="Male"),aes(x=Age.sire,y=Age.off)) + geom_jitter() + geom_smooth(method=lm)
+ageplotreg
+```
+
+Note, could try binomial or multinomial regression, but I find interpreting the results from those models to be very difficult.
+
+## Fitness (offspring number)
+
+Males
+
+```{r}
+dr = ped
+dr$noff.mid = (dr$noff.dam+dr$noff.sire)/2
+summary(dr$noff.mid)
+rfit_males = lm(noff.off~noff.mid*Origin_ped.off +as.factor(Year.off)+Final_Status_ped.off,data=subset(dr,Sex_Final.off == "Male"))
+summary(rfit_males)
+
+rfit_male_plot = ggplot(data=subset(dr,Sex_Final.off == "Male"),aes(x=noff.mid,y=noff.off,color=as.factor(Year.off),pch=Origin_ped.off)) + geom_point(alpha=.2) + geom_smooth(method=lm)  + facet_wrap(vars(Final_Status_ped.off,Final_Status_ped.dam),scales = "free")
+rfit_male_plot
+```
